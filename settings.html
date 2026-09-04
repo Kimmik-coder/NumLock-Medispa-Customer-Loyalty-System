@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>MediSpa - Settings</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app">
+    <div class="sidebar" id="sidebar-slot"></div>
+    <div class="main">
+      <div class="topbar" id="topbar-slot"></div>
+
+      <div class="card">
+        <h2>Store &amp; Loyalty Settings</h2>
+        <form id="settings-form" class="form-grid">
+          <div class="field"><label>Store name</label><input id="s-name"></div>
+          <div class="field"><label>Points earned</label><input id="s-points" type="number" min="1"></div>
+          <div class="field"><label>Per amount spent</label><input id="s-unit" type="number" min="1"></div>
+          <div class="field"><label>Redeem threshold (points)</label><input id="s-threshold" type="number" min="1"></div>
+          <button class="btn solid" type="submit">Save Settings</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Change Password</h2>
+        <form id="password-form" class="form-grid">
+          <div class="field"><label>Current password</label><input id="p-current" type="password" required></div>
+          <div class="field"><label>New password</label><input id="p-new" type="password" required></div>
+          <button class="btn solid" type="submit">Update Password</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Demo Data</h2>
+        <p style="font-size:13px;color:var(--text-muted)">Everything is stored in this browser only (LocalStorage). Use this to wipe and reseed with sample data.</p>
+        <button class="btn danger" id="reset-btn">Reset All Data</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+  <script>
+    const session = requireAuth();
+    renderShell('settings.html', 'Setting');
+
+    const settingsForm = document.getElementById('settings-form');
+    function loadSettingsIntoForm() {
+      const s = readDB(DB_KEYS.settings, {});
+      document.getElementById('s-name').value = s.storeName || 'MediSpa';
+      document.getElementById('s-points').value = s.pointsPerAmount || 10;
+      document.getElementById('s-unit').value = s.amountUnit || 100;
+      document.getElementById('s-threshold').value = s.redeemThreshold || 100;
+    }
+    loadSettingsIntoForm();
+
+    settingsForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      writeDB(DB_KEYS.settings, {
+        storeName: document.getElementById('s-name').value.trim() || 'MediSpa',
+        pointsPerAmount: parseInt(document.getElementById('s-points').value || '10', 10),
+        amountUnit: parseInt(document.getElementById('s-unit').value || '100', 10),
+        redeemThreshold: parseInt(document.getElementById('s-threshold').value || '100', 10)
+      });
+      toast('Settings saved');
+    });
+
+    document.getElementById('password-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      const users = readDB(DB_KEYS.users, []);
+      const idx = users.findIndex(u => u.username === session.username);
+      const current = document.getElementById('p-current').value;
+      const next = document.getElementById('p-new').value;
+      if (idx === -1 || users[idx].password !== current) {
+        toast('Current password is incorrect');
+        return;
+      }
+      users[idx].password = next;
+      writeDB(DB_KEYS.users, users);
+      this.reset();
+      toast('Password updated');
+    });
+
+    document.getElementById('reset-btn').addEventListener('click', function () {
+      if (!confirm('This will erase all customers, transactions, and settings in this browser. Continue?')) return;
+      Object.values(DB_KEYS).forEach(k => { if (k !== DB_KEYS.session) localStorage.removeItem(k); });
+      seedIfEmpty();
+      loadSettingsIntoForm();
+      toast('Data reset to sample data');
+    });
+  </script>
+</body>
+</html>

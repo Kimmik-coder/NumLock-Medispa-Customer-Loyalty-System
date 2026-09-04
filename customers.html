@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>MediSpa - Customer</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app">
+    <div class="sidebar" id="sidebar-slot"></div>
+    <div class="main">
+      <div class="topbar" id="topbar-slot"></div>
+
+      <div class="card">
+        <h2 id="form-title">Add Customer</h2>
+        <form id="customer-form" class="form-grid">
+          <input type="hidden" id="cust-id">
+          <div class="field"><label>Full name</label><input id="cust-name" required></div>
+          <div class="field"><label>Phone</label><input id="cust-phone"></div>
+          <div class="field"><label>Email</label><input id="cust-email" type="email"></div>
+          <div class="field"><label>Starting points</label><input id="cust-points" type="number" min="0" value="0"></div>
+          <button class="btn solid" type="submit" id="save-btn">Add Customer</button>
+          <button class="btn" type="button" id="cancel-edit" style="display:none;">Cancel</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>All Customers</h2>
+        <table>
+          <thead>
+            <tr><th>Name</th><th>Phone</th><th>Email</th><th>Points</th><th>Status</th><th>Joined</th><th></th></tr>
+          </thead>
+          <tbody id="cust-rows"></tbody>
+        </table>
+        <div id="cust-empty" class="empty-state" style="display:none;">No customers yet — add your first one above.</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+  <script>
+    requireAuth();
+    renderShell('customers.html', 'Customer');
+
+    const settings = readDB(DB_KEYS.settings, { redeemThreshold: 100 });
+
+    function loadCustomers() { return readDB(DB_KEYS.customers, []); }
+    function saveCustomers(list) { writeDB(DB_KEYS.customers, list); }
+
+    function renderTable() {
+      const list = loadCustomers();
+      const rows = document.getElementById('cust-rows');
+      document.getElementById('cust-empty').style.display = list.length ? 'none' : 'block';
+      rows.innerHTML = list.map(c => `
+        <tr>
+          <td>${c.name}</td>
+          <td>${c.phone || '-'}</td>
+          <td>${c.email || '-'}</td>
+          <td>${c.points || 0}</td>
+          <td>${(c.points || 0) >= settings.redeemThreshold
+              ? '<span class="badge gold">Loyalty Ready</span>'
+              : '<span class="badge member">Member</span>'}</td>
+          <td>${c.joined || '-'}</td>
+          <td class="row-actions">
+            <button class="btn" data-edit="${c.id}">Edit</button>
+            <button class="btn danger" data-del="${c.id}">Delete</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+    renderTable();
+
+    const form = document.getElementById('customer-form');
+    const cancelBtn = document.getElementById('cancel-edit');
+
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      const list = loadCustomers();
+      const id = document.getElementById('cust-id').value;
+      const name = document.getElementById('cust-name').value.trim();
+      if (!name) return;
+      const phone = document.getElementById('cust-phone').value.trim();
+      const email = document.getElementById('cust-email').value.trim();
+      const points = parseInt(document.getElementById('cust-points').value || '0', 10);
+
+      if (id) {
+        const idx = list.findIndex(c => c.id === id);
+        if (idx > -1) {
+          list[idx] = { ...list[idx], name, phone, email, points };
+        }
+        toast('Customer updated');
+      } else {
+        list.push({
+          id: cryptoId(), name, phone, email, points,
+          joined: new Date().toISOString().slice(0, 10)
+        });
+        toast('Customer added');
+      }
+      saveCustomers(list);
+      resetForm();
+      renderTable();
+    });
+
+    function resetForm() {
+      document.getElementById('cust-id').value = '';
+      form.reset();
+      document.getElementById('form-title').textContent = 'Add Customer';
+      document.getElementById('save-btn').textContent = 'Add Customer';
+      cancelBtn.style.display = 'none';
+    }
+    cancelBtn.addEventListener('click', resetForm);
+
+    document.getElementById('cust-rows').addEventListener('click', function (e) {
+      const editId = e.target.getAttribute('data-edit');
+      const delId = e.target.getAttribute('data-del');
+      const list = loadCustomers();
+
+      if (editId) {
+        const c = list.find(x => x.id === editId);
+        if (!c) return;
+        document.getElementById('cust-id').value = c.id;
+        document.getElementById('cust-name').value = c.name;
+        document.getElementById('cust-phone').value = c.phone || '';
+        document.getElementById('cust-email').value = c.email || '';
+        document.getElementById('cust-points').value = c.points || 0;
+        document.getElementById('form-title').textContent = 'Edit Customer';
+        document.getElementById('save-btn').textContent = 'Save Changes';
+        cancelBtn.style.display = 'inline-block';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+
+      if (delId) {
+        if (!confirm('Delete this customer? This cannot be undone.')) return;
+        saveCustomers(list.filter(x => x.id !== delId));
+        renderTable();
+        toast('Customer deleted');
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,93 +1,66 @@
-# MediSpa — Customer & Loyalty Demo
+# MediSpa — Customer & Loyalty Management System (Frontend Demo)
 
-A simple, single-layer front-end stack, matching the tech-stack brief:
+A polished front-end prototype for a MediSpa customer and loyalty management system. It is intentionally built without a backend so the main user flows can be demonstrated during a class presentation.
 
-| Layer      | Tech                          |
-|------------|--------------------------------|
-| Structure  | HTML5                          |
-| Styling    | CSS3 (no framework)            |
-| Logic      | Vanilla JavaScript             |
-| Data       | Browser LocalStorage           |
-| Vouchers   | `window.print()`               |
-| Login      | Plain `if/else` username+password check |
+## Frontend implementation
 
-No backend, no build tools, no npm install. It runs by opening the HTML files in a browser.
+The prototype now demonstrates the core planned frontend flows:
 
-## What's inside
+- **Login** — demo authentication screen using the supplied MediSpa logo.
+- **Dashboard** — KPI cards, sales overview chart, recent customers, quick actions, and loyalty-rule summary.
+- **Customer** — add/edit/delete customer records, loyalty status badges, search, and status filtering.
+- **Transaction** — record a purchase, automatically calculate points, update the customer's balance, and offer a printable reward voucher when the threshold is reached.
+- **Report** — revenue, transaction count, average transaction, customer points, and total spending with print support.
+- **Setting** — store name, loyalty rules, password update, and demo-data reset.
 
-```
-medispa/
-├── index.html          Login page
-├── dashboard.html       KPI cards, sales chart, recent customers
-├── customers.html       Add / edit / delete customers, view loyalty status
-├── transactions.html    Record a sale, auto-calculates points, prints a voucher at threshold
-├── report.html          Revenue summary and top customers by points
-├── settings.html        Store name, points rules, change password, reset demo data
-├── css/style.css        All styling
-└── js/app.js            Shared data layer (LocalStorage), auth, sidebar/topbar
-```
+All major screens are connected through the shared sidebar navigation. The layout is responsive for desktop/tablet/mobile widths, with a mobile slide-out navigation and overlay.
 
-## How to run it
+## Tech stack
 
-**Option A — just open it (fastest)**
-1. Unzip the folder anywhere on your computer.
-2. Double-click `index.html` — it opens in your default browser.
-3. Log in with the demo account: **admin** / **admin123**
+| Layer | Technology |
+|---|---|
+| Structure | HTML5 |
+| Styling | CSS3 |
+| Logic | Vanilla JavaScript |
+| Data | Browser LocalStorage |
+| Voucher | `window.print()` |
+| Assets | Supplied MediSpa logo |
 
-That's it. Every page links to the next through the sidebar.
+No backend, database, npm install, or build process is required.
 
-> Note: some browsers restrict LocalStorage on pages opened via `file://`.
-> If data doesn't seem to save, use Option B instead.
+## Demo account
 
-**Option B — run a tiny local server (recommended, avoids file:// quirks)**
+**Username:** `admin`  
+**Password:** `admin123`
 
-If you have Python installed:
+## Run
+
+### Option A — open directly
+Unzip the project and open `index.html` in a browser.
+
+### Option B — local server (recommended)
+
 ```bash
 cd medispa
 python3 -m http.server 8000
 ```
-Then open **http://localhost:8000** in your browser.
 
-If you have Node.js installed:
-```bash
-cd medispa
-npx serve .
-```
-and open the URL it prints (usually http://localhost:3000).
+Then open `http://localhost:8000`.
 
-**Option C — VS Code**
-Install the "Live Server" extension, right-click `index.html`, choose
-"Open with Live Server".
+## Demo flow for presentation
 
-## How the data works
+1. Log in.
+2. From Dashboard, show the KPI cards, Sales Overview, Recent Customers, and Loyalty Program summary.
+3. Open **Customer** and demonstrate search/filter plus Add/Edit/Delete.
+4. Open **Transaction**, select a customer, enter an amount, and record it. Points are calculated automatically.
+5. Show the updated transaction history and customer points.
+6. Open **Report** to show revenue and loyalty/customer spending information and demonstrate Print.
+7. Open **Setting** to show configurable loyalty rules and demo-data reset.
 
-Everything is stored in the browser's LocalStorage under keys prefixed
-`medispa_` — customers, transactions, settings, and the logged-in session.
-There is no real database and no server: each browser/profile has its own
-independent copy of the data. Clearing your browser's site data (or using
-a different browser) resets everything.
+## Data and limitations
 
-On first run, the app seeds itself with:
-- One login: `admin` / `admin123`
-- Three sample customers
-- Four sample transactions
+The prototype stores data in browser LocalStorage only. It is suitable for a frontend classroom demonstration, not production use. Passwords are stored in plain text in LocalStorage, and data is not synchronized between devices.
 
-Use **Settings → Reset All Data** at any time to wipe and reseed.
 
-## Loyalty logic
-
-- Configurable in Settings (defaults shown):
-  - Earn **10 points** per **100** spent on a transaction.
-  - Once a customer's running point total reaches **100**, the next
-    transaction that crosses the threshold pops a confirmation and, if
-    accepted, opens the browser print dialog with a printable voucher.
-- Recorded transactions immediately update the customer's point balance
-  and the Dashboard/Report KPIs.
-
-## Known limitations (by design — this is a prototype)
-
-- Passwords are stored in plain text in LocalStorage — fine for a demo,
-  not for production.
-- No multi-user sync — LocalStorage is per-browser, per-device.
-- The "Sales Overview" chart is a small hand-rolled canvas chart (no
-  external charting library), grouped by transaction date.
+## Branding & Navigation Icons
+- Uses the provided MediSpa logo and supplied navigation icons.

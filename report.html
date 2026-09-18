@@ -2,8 +2,35 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MediSpa - Report</title>
 <link rel="stylesheet" href="css/style.css">
+<style>
+  .filter-row {
+    display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 18px;
+  }
+  .filter-row .field { display: flex; flex-direction: column; gap: 4px; }
+  .filter-row label { font-size: 12px; color: var(--text-muted, #667); }
+  .filter-row .btn { height: 38px; }
+
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  .chart-wrap { padding: 6px 4px 0; }
+  .chart-wrap svg { width: 100%; height: auto; display: block; }
+  .chart-empty { padding: 30px 0; text-align: center; color: var(--text-muted, #667); font-size: 13px; }
+
+  .kpi-sub { font-size: 12px; color: var(--text-muted, #667); margin-top: 2px; }
+
+  @media (max-width: 640px) {
+    .filter-row { flex-direction: column; align-items: stretch; }
+    .filter-row .field, .filter-row .btn { width: 100%; }
+    .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .table-wrap table { min-width: 480px; }
+  }
+  @media print {
+    .sidebar, .topbar, .filter-row, #print-report { display: none !important; }
+  }
+</style>
 </head>
 <body>
   <div class="app">
@@ -11,32 +38,57 @@
     <div class="main">
       <div class="topbar" id="topbar-slot"></div>
 
+      <div class="card">
+        <div class="filter-row">
+          <div class="field">
+            <label for="f-from">From</label>
+            <input type="date" id="f-from">
+          </div>
+          <div class="field">
+            <label for="f-to">To</label>
+            <input type="date" id="f-to">
+          </div>
+          <button class="btn" id="f-clear" type="button">Clear</button>
+          <button class="btn" id="f-30" type="button">Last 30 days</button>
+        </div>
+      </div>
+
       <div class="kpi-row">
         <div class="kpi-card">
-          <div class="kpi-label">Total Revenue</div>
-          <div class="kpi-value" id="r-revenue">0</div>
+          <div class="kpi-label">Total revenue</div>
+          <div class="kpi-value" id="r-revenue">\u20B10.00</div>
+          <div class="kpi-sub" id="r-range">All time</div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-label">Total Transactions</div>
+          <div class="kpi-label">Total transactions</div>
           <div class="kpi-value" id="r-count">0</div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-label">Avg. Transaction</div>
-          <div class="kpi-value" id="r-avg">0</div>
+          <div class="kpi-label">Avg. transaction</div>
+          <div class="kpi-value" id="r-avg">\u20B10.00</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Points redeemed</div>
+          <div class="kpi-value" id="r-redeemed">0</div>
         </div>
       </div>
 
       <div class="card">
-        <h2>Top Customers by Points</h2>
-        <table>
-          <thead><tr><th>Name</th><th>Points</th><th>Total Spent</th></tr></thead>
-          <tbody id="r-rows"></tbody>
-        </table>
-        <div id="r-empty" class="empty-state" style="display:none;">No data yet.</div>
+        <div class="panel-head"><div><h2 style="margin-bottom:4px;">Revenue by day</h2><div class="card-subtitle" style="margin:0;">Daily totals for the selected range.</div></div></div>
+        <div class="chart-wrap" id="chart-wrap"></div>
       </div>
 
       <div class="card">
-        <button class="btn solid" id="print-report">Print This Report</button>
+        <div class="panel-head"><div><h2 style="margin-bottom:4px;">Top customers by points</h2><div class="card-subtitle" style="margin:0;">A quick summary for monitoring customer spending and loyalty activity.</div></div></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Name</th><th class="num">Points</th><th class="num">Total spent</th><th>Status</th></tr></thead>
+          <tbody id="r-rows"></tbody>
+        </table></div>
+        <div id="r-empty" class="empty-state" style="display:none;">No data yet for this range.</div>
+      </div>
+
+      <div class="card">
+        <button class="btn solid" id="print-report" type="button">Print this report</button>
       </div>
     </div>
   </div>
@@ -46,25 +98,163 @@
     requireAuth();
     renderShell('report.html', 'Report');
 
+    const raw = readDB(DB_KEYS.settings, {});
+    const settings = {
+      redeemThreshold: raw.redeemThreshold ?? 100,
+      currency: raw.currency ?? '\u20B1'
+    };
+    const RED_KEY = DB_KEYS.redemptions || 'medispa_redemptions';
+
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, m => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]
+    ));
+    function peso(n) {
+      return settings.currency + (Number(n) || 0).toLocaleString('en-PH', {
+        minimumFractionDigits: 2, maximumFractionDigits: 2
+      });
+    }
+    function formatDate(iso) {
+      if (!iso) return '-';
+      const d = new Date(iso);
+      if (isNaN(d)) return esc(iso);
+      return d.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: '2-digit' });
+    }
+    function shortDate(iso) {
+      const d = new Date(iso);
+      return isNaN(d) ? iso : d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
+    }
+    const isoToday = () => new Date().toISOString().slice(0, 10);
+
     const customers = readDB(DB_KEYS.customers, []);
-    const txns = readDB(DB_KEYS.transactions, []);
+    const allTxns = readDB(DB_KEYS.transactions, []);
+    const redemptions = readDB(RED_KEY, []);
 
-    const totalRevenue = txns.reduce((s, t) => s + Number(t.amount || 0), 0);
-    document.getElementById('r-revenue').textContent = money(totalRevenue);
-    document.getElementById('r-count').textContent = txns.length;
-    document.getElementById('r-avg').textContent = money(txns.length ? totalRevenue / txns.length : 0);
+    function displayName(c) {
+      if (!c) return 'Deleted customer';
+      if (c.lastName || c.firstName) {
+        return `${c.lastName || ''}${c.lastName && c.firstName ? ', ' : ''}${c.firstName || ''}`;
+      }
+      return c.name || '-';
+    }
 
-    const spentByCustomer = {};
-    txns.forEach(t => { spentByCustomer[t.customerId] = (spentByCustomer[t.customerId] || 0) + Number(t.amount || 0); });
+    const fromEl = document.getElementById('f-from');
+    const toEl = document.getElementById('f-to');
 
-    const ranked = [...customers].sort((a, b) => (b.points || 0) - (a.points || 0));
-    const rowsEl = document.getElementById('r-rows');
-    document.getElementById('r-empty').style.display = ranked.length ? 'none' : 'block';
-    rowsEl.innerHTML = ranked.map(c => `
-      <tr><td>${c.name}</td><td>${c.points || 0}</td><td>${money(spentByCustomer[c.id] || 0)}</td></tr>
-    `).join('');
+    function inRange(dateStr) {
+      const from = fromEl.value, to = toEl.value;
+      if (from && dateStr < from) return false;
+      if (to && dateStr > to) return false;
+      return true;
+    }
+
+    function render() {
+      const txns = allTxns.filter(t => inRange(t.date));
+      const reds = redemptions.filter(r => inRange(r.date));
+
+      const totalRevenue = txns.reduce((s, t) => s + Number(t.amount || 0), 0);
+      document.getElementById('r-revenue').textContent = peso(totalRevenue);
+      document.getElementById('r-count').textContent = txns.length;
+      document.getElementById('r-avg').textContent = peso(txns.length ? totalRevenue / txns.length : 0);
+      document.getElementById('r-redeemed').textContent =
+        reds.reduce((s, r) => s + (r.points || 0), 0);
+
+      const from = fromEl.value, to = toEl.value;
+      document.getElementById('r-range').textContent =
+        (from || to) ? `${from ? formatDate(from) : 'Start'} \u2013 ${to ? formatDate(to) : 'Today'}` : 'All time';
+
+      // Points and spend per customer, scoped to the filtered range
+      const spentByCustomer = {};
+      const earnedByCustomer = {};
+      txns.forEach(t => {
+        spentByCustomer[t.customerId] = (spentByCustomer[t.customerId] || 0) + Number(t.amount || 0);
+        earnedByCustomer[t.customerId] = (earnedByCustomer[t.customerId] || 0) + Number(t.pointsEarned || 0);
+      });
+
+      const ranked = customers
+        .map(c => ({ c, spend: spentByCustomer[c.id] || 0, earnedInRange: earnedByCustomer[c.id] || 0 }))
+        .sort((a, b) => (b.c.points || 0) - (a.c.points || 0));
+
+      const rowsEl = document.getElementById('r-rows');
+      const hasRows = (from || to) ? ranked.some(r => r.spend > 0) : ranked.length > 0;
+      document.getElementById('r-empty').style.display = hasRows ? 'none' : 'block';
+
+      const rowsToShow = (from || to) ? ranked.filter(r => r.spend > 0) : ranked;
+      rowsEl.innerHTML = rowsToShow.map(({ c, spend }) => {
+        const pts = c.points || 0;
+        const ready = pts >= settings.redeemThreshold;
+        return `
+        <tr>
+          <td>${esc(displayName(c))}</td>
+          <td class="num">${pts}</td>
+          <td class="num">${peso(spend)}</td>
+          <td>${ready ? '<span class="badge gold">Loyalty Ready</span>' : '<span class="badge member">Member</span>'}</td>
+        </tr>`;
+      }).join('');
+
+      renderChart(txns);
+    }
+
+    function renderChart(txns) {
+      const wrap = document.getElementById('chart-wrap');
+      if (!txns.length) {
+        wrap.innerHTML = '<div class="chart-empty">No transactions in this range yet.</div>';
+        return;
+      }
+
+      const byDay = {};
+      txns.forEach(t => { byDay[t.date] = (byDay[t.date] || 0) + Number(t.amount || 0); });
+      const days = Object.keys(byDay).sort();
+      const max = Math.max(...days.map(d => byDay[d]), 1);
+
+      const W = 700, H = 220, padL = 56, padB = 28, padT = 10, padR = 10;
+      const plotW = W - padL - padR, plotH = H - padT - padB;
+      const barGap = 6;
+      const barW = Math.max(6, plotW / days.length - barGap);
+
+      const yTicks = 4;
+      let gridSvg = '';
+      for (let i = 0; i <= yTicks; i++) {
+        const val = (max / yTicks) * i;
+        const y = padT + plotH - (val / max) * plotH;
+        gridSvg += `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W - padR}" y2="${y.toFixed(1)}" stroke="#E7E2D8" stroke-width="1"/>`;
+        gridSvg += `<text x="${padL - 8}" y="${(y + 3).toFixed(1)}" font-size="10" fill="#8A8A82" text-anchor="end">${peso(val)}</text>`;
+      }
+
+      let barsSvg = '';
+      days.forEach((d, i) => {
+        const val = byDay[d];
+        const x = padL + i * (barW + barGap);
+        const barH = (val / max) * plotH;
+        const y = padT + plotH - barH;
+        const showLabel = days.length <= 10 || i % Math.ceil(days.length / 10) === 0;
+        barsSvg += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${barH.toFixed(1)}" rx="3" fill="#2C8C82">
+          <title>${esc(formatDate(d))}: ${esc(peso(val))}</title>
+        </rect>`;
+        if (showLabel) {
+          barsSvg += `<text x="${(x + barW / 2).toFixed(1)}" y="${H - 8}" font-size="10" fill="#8A8A82" text-anchor="middle">${esc(shortDate(d))}</text>`;
+        }
+      });
+
+      wrap.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Revenue by day">${gridSvg}${barsSvg}</svg>`;
+    }
+
+    document.getElementById('f-clear').addEventListener('click', () => {
+      fromEl.value = ''; toEl.value = ''; render();
+    });
+    document.getElementById('f-30').addEventListener('click', () => {
+      const to = new Date();
+      const from = new Date();
+      from.setDate(from.getDate() - 29);
+      toEl.value = to.toISOString().slice(0, 10);
+      fromEl.value = from.toISOString().slice(0, 10);
+      render();
+    });
+    fromEl.addEventListener('change', render);
+    toEl.addEventListener('change', render);
 
     document.getElementById('print-report').addEventListener('click', () => window.print());
+
+    render();
   </script>
 </body>
 </html>

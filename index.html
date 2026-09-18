@@ -2,53 +2,37 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MediSpa - Login</title>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
   <div class="login-wrap">
     <div class="login-card">
-      <span class="logo-icon">&#10023;</span>
+      <img class="login-logo" src="assets/medispa-logo.png" alt="MediSpa logo">
       <h1>MediSpa</h1>
-      <p class="tag">Customer &amp; Loyalty Management</p>
-
+      <p class="tag">Customer &amp; Loyalty Management System</p>
       <form id="login-form">
-        <div class="field">
-          <label for="username">Username</label>
-          <input id="username" type="text" autocomplete="username" required>
-        </div>
-        <div class="field">
-          <label for="password">Password</label>
-          <input id="password" type="password" autocomplete="current-password" required>
-        </div>
+        <div class="field"><label for="username">Username</label><input id="username" type="text" autocomplete="username" placeholder="Enter username" required></div>
+        <div class="field"><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" placeholder="Enter password" required></div>
         <button class="btn-primary" type="submit">Log in</button>
         <div class="login-error" id="login-error"></div>
       </form>
-
-      <div class="login-hint">Demo login: <strong>admin</strong> / <strong>admin123</strong></div>
+      <div class="login-hint">Demo account: <strong>admin</strong> / <strong>admin123</strong></div>
     </div>
   </div>
-
   <script src="js/app.js"></script>
   <script>
     seedIfEmpty();
-    // If already logged in, skip straight to the dashboard.
     const s = getSession();
     if (s && s.loggedIn) window.location.href = 'dashboard.html';
-
     document.getElementById('login-form').addEventListener('submit', function (e) {
       e.preventDefault();
       const u = document.getElementById('username').value.trim();
       const p = document.getElementById('password').value;
       const errEl = document.getElementById('login-error');
-
-      // Simple if-else style check (see login())
-      if (login(u, p)) {
-        errEl.textContent = '';
-        window.location.href = 'dashboard.html';
-      } else {
-        errEl.textContent = 'Incorrect username or password.';
-      }
+      if (login(u, p)) { errEl.textContent = ''; window.location.href = 'dashboard.html'; }
+      else errEl.textContent = 'Incorrect username or password.';
     });
   </script>
 </body>

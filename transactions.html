@@ -2,8 +2,57 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>MediSpa - Transaction</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MediSpa - Transactions</title>
 <link rel="stylesheet" href="css/style.css">
+<style>
+  /* ---- Page-scoped additions. Kapareho ng customers.html. ---- */
+  .form-grid { align-items: start; }
+  .field { position: relative; padding-bottom: 20px; }
+  .field .hint,
+  .field .err {
+    position: absolute; top: 100%; left: 0; margin-top: -16px;
+    font-size: 12px; line-height: 1.3;
+  }
+  .field .hint { opacity: .65; }
+  .field .err { color: #c0392b; display: none; }
+  .field.invalid input,
+  .field.invalid select { border-color: #c0392b; }
+  .field.invalid .err { display: block; }
+  .field.invalid .hint { display: none; }
+
+  .row-actions { white-space: nowrap; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(15,23,32,.45);
+    display: none; align-items: center; justify-content: center; padding: 16px; z-index: 60;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: #fff; border-radius: 14px; padding: 24px; width: 100%; max-width: 420px;
+    box-shadow: 0 18px 50px rgba(0,0,0,.2);
+  }
+  .voucher {
+    border: 2px dashed #c79a2e; border-radius: 12px; padding: 18px; text-align: center;
+    background: #fffdf5; margin: 14px 0;
+  }
+  .voucher .code { font-size: 22px; letter-spacing: 2px; font-weight: 700; margin: 6px 0; }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+  @media (max-width: 900px) { .form-grid { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 640px) {
+    .form-grid { grid-template-columns: 1fr; }
+    .form-grid .btn { width: 100%; }
+    .panel-head { flex-direction: column; align-items: flex-start; gap: 8px; }
+    .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .table-wrap table { min-width: 640px; }
+  }
+  @media print {
+    .sidebar, .topbar, .modal-actions { display: none !important; }
+    .modal-backdrop { position: static; background: none; }
+  }
+</style>
 </head>
 <body>
   <div class="app">
@@ -12,143 +61,309 @@
       <div class="topbar" id="topbar-slot"></div>
 
       <div class="card">
-        <h2>New Transaction</h2>
-        <form id="txn-form" class="form-grid">
-          <div class="field">
-            <label>Customer</label>
-            <select id="txn-customer" required></select>
+        <h2>New transaction</h2>
+        <div class="card-subtitle">Record a purchase and the system computes the loyalty points.</div>
+        <form id="txn-form" class="form-grid" novalidate>
+          <div class="field" id="f-cust">
+            <label for="txn-customer">Customer</label>
+            <select id="txn-customer"></select>
+            <div class="err" id="e-cust"></div>
           </div>
-          <div class="field">
-            <label>Amount</label>
-            <input id="txn-amount" type="number" min="0" step="0.01" required>
+          <div class="field" id="f-amount">
+            <label for="txn-amount">Amount</label>
+            <input id="txn-amount" type="number" min="0.01" step="0.01" placeholder="0.00" inputmode="decimal">
+            <div class="hint" id="points-preview">Earns 0 points</div>
+            <div class="err" id="e-amount"></div>
           </div>
-          <div class="field">
-            <label>Date</label>
-            <input id="txn-date" type="date" required>
+          <div class="field" id="f-date">
+            <label for="txn-date">Date</label>
+            <input id="txn-date" type="date">
+            <div class="err" id="e-date"></div>
           </div>
-          <button class="btn solid" type="submit">Record Transaction</button>
+          <button class="btn solid" type="submit">Record transaction</button>
         </form>
         <p style="font-size:12px;color:var(--text-muted);margin-top:10px;" id="rule-text"></p>
       </div>
 
       <div class="card">
-        <h2>Transaction History</h2>
-        <table>
-          <thead><tr><th>Date</th><th>Customer</th><th>Amount</th><th>Points Earned</th><th></th></tr></thead>
+        <div class="panel-head">
+          <div>
+            <h2 style="margin-bottom:4px;">Transaction history</h2>
+            <div class="card-subtitle" style="margin:0;">Review recorded purchases and points earned by each customer.</div>
+          </div>
+          <span class="badge member" id="txn-count">0 transactions</span>
+        </div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Date</th><th>Customer</th><th class="num">Amount</th><th class="num">Points earned</th><th></th></tr></thead>
           <tbody id="txn-rows"></tbody>
-        </table>
-        <div id="txn-empty" class="empty-state" style="display:none;">No transactions recorded yet.</div>
+        </table></div>
+        <div id="txn-empty" class="empty-state" style="display:none;">No transactions yet. Record one above to start earning points.</div>
       </div>
     </div>
   </div>
 
-  <!-- printable voucher, hidden on screen, shown only when printing -->
-  <div id="voucher-print">
-    <div class="voucher">
-      <h2 id="v-store">MediSpa</h2>
-      <div>Loyalty Reward Voucher</div>
-      <div class="amount" id="v-points">0 pts</div>
-      <div id="v-customer">Customer: -</div>
-      <div class="meta" id="v-meta"></div>
+  <!-- Voucher modal -->
+  <div class="modal-backdrop" id="voucher-modal" role="dialog" aria-modal="true" aria-labelledby="voucher-title">
+    <div class="modal">
+      <h2 id="voucher-title" style="margin-top:0;">Reward redeemed</h2>
+      <p class="card-subtitle" id="voucher-sub" style="margin-top:4px;"></p>
+      <div class="voucher">
+        <div style="font-size:12px;letter-spacing:1px;" id="v-store">MEDISPA REWARD VOUCHER</div>
+        <div class="code" id="voucher-code">—</div>
+        <div id="voucher-meta" style="font-size:13px;"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" type="button" id="voucher-print">Print</button>
+        <button class="btn solid" type="button" id="voucher-close">Done</button>
+      </div>
     </div>
   </div>
 
   <script src="js/app.js"></script>
   <script>
     requireAuth();
-    renderShell('transactions.html', 'Transaction');
+    renderShell('transactions.html', 'Transactions');
 
-    const settings = readDB(DB_KEYS.settings, { pointsPerAmount: 10, amountUnit: 100, redeemThreshold: 100, storeName: 'MediSpa' });
+    /* ---------- Settings (tanggap ang luma at bagong key names) ---------- */
+    const raw = readDB(DB_KEYS.settings, {});
+    const settings = {
+      pointsPer:       raw.pointsPer       ?? raw.pointsPerAmount ?? 12,
+      spendPer:        raw.spendPer        ?? raw.amountUnit      ?? 110,
+      redeemThreshold: raw.redeemThreshold ?? 100,
+      storeName:       raw.storeName       ?? 'MediSpa',
+      currency:        raw.currency        ?? '\u20B1'
+    };
+    const RED_KEY = DB_KEYS.redemptions || 'medispa_redemptions';
+
+    /* ---------- Helpers ---------- */
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, m => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]
+    ));
+
+    function peso(n) {
+      return settings.currency + (Number(n) || 0).toLocaleString('en-PH', {
+        minimumFractionDigits: 2, maximumFractionDigits: 2
+      });
+    }
+
+    function formatDate(iso) {
+      if (!iso) return '-';
+      const d = new Date(iso);
+      if (isNaN(d)) return esc(iso);
+      return d.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: '2-digit' });
+    }
+
+    function pointsFor(amount) {
+      return Math.floor((Number(amount) || 0) / settings.spendPer) * settings.pointsPer;
+    }
+
+    const today = () => new Date().toISOString().slice(0, 10);
+
+    const loadCustomers = () => readDB(DB_KEYS.customers, []);
+    const saveCustomers = list => writeDB(DB_KEYS.customers, list);
+    const loadTxns = () => readDB(DB_KEYS.transactions, []);
+    const saveTxns = list => writeDB(DB_KEYS.transactions, list);
+    const loadRedemptions = () => readDB(RED_KEY, []);
+    const saveRedemptions = list => writeDB(RED_KEY, list);
+
+    function displayName(c) {
+      if (!c) return 'Unknown customer';
+      if (c.lastName || c.firstName) {
+        return `${c.lastName || ''}${c.lastName && c.firstName ? ', ' : ''}${c.firstName || ''}`;
+      }
+      return c.name || '-';
+    }
+
     document.getElementById('rule-text').textContent =
-      `Earns ${settings.pointsPerAmount} points per ${settings.amountUnit} spent. ` +
-      `A voucher offer prints automatically once a customer reaches ${settings.redeemThreshold} points.`;
+      `Earns ${settings.pointsPer} points per ${settings.currency}${settings.spendPer} spent. ` +
+      `A customer can redeem a reward once they reach ${settings.redeemThreshold} points.`;
 
-    function loadCustomers() { return readDB(DB_KEYS.customers, []); }
-    function saveCustomers(list) { writeDB(DB_KEYS.customers, list); }
-    function loadTxns() { return readDB(DB_KEYS.transactions, []); }
-    function saveTxns(list) { writeDB(DB_KEYS.transactions, list); }
-
-    // populate customer select
+    /* ---------- Customer dropdown ---------- */
     const custSelect = document.getElementById('txn-customer');
     function fillCustomerSelect() {
       const custs = loadCustomers();
-      custSelect.innerHTML = custs.map(c => `<option value="${c.id}">${c.name}</option>`).join('')
-        || '<option value="">No customers — add one first</option>';
+      if (!custs.length) {
+        custSelect.innerHTML = '<option value="">No customers yet — add one first</option>';
+        return;
+      }
+      custSelect.innerHTML = '<option value="">Select customer</option>' +
+        custs
+          .slice()
+          .sort((a, b) => displayName(a).localeCompare(displayName(b)))
+          .map(c => `<option value="${esc(c.id)}">${esc(displayName(c))} (${c.points || 0} pts)</option>`)
+          .join('');
     }
     fillCustomerSelect();
-    document.getElementById('txn-date').value = new Date().toISOString().slice(0, 10);
+    document.getElementById('txn-date').value = today();
 
-    function renderTxnTable() {
-      const list = [...loadTxns()].sort((a, b) => b.date.localeCompare(a.date));
-      const rows = document.getElementById('txn-rows');
-      document.getElementById('txn-empty').style.display = list.length ? 'none' : 'block';
-      rows.innerHTML = list.map(t => `
-        <tr>
-          <td>${t.date}</td>
-          <td>${t.customerName}</td>
-          <td>${money(t.amount)}</td>
-          <td>${t.pointsEarned}</td>
-          <td class="row-actions"><button class="btn danger" data-del="${t.id}">Delete</button></td>
-        </tr>
-      `).join('');
+    /* ---------- Validation ---------- */
+    function setError(fieldId, msg) {
+      const f = document.getElementById(fieldId);
+      const e = document.getElementById(fieldId.replace('f-', 'e-'));
+      if (msg) { f.classList.add('invalid'); e.textContent = msg; }
+      else { f.classList.remove('invalid'); e.textContent = ''; }
+      return !msg;
     }
-    renderTxnTable();
+    function clearErrors() { ['f-cust', 'f-amount', 'f-date'].forEach(id => setError(id, '')); }
 
+    const amountInput = document.getElementById('txn-amount');
+    amountInput.addEventListener('input', function () {
+      const pts = pointsFor(this.value);
+      document.getElementById('points-preview').textContent =
+        `Earns ${pts} point${pts === 1 ? '' : 's'}`;
+    });
+
+    /* ---------- Table ---------- */
+    function renderTxnTable() {
+      const custs = loadCustomers();
+      const list = loadTxns().slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
+      document.getElementById('txn-empty').style.display = list.length ? 'none' : 'block';
+      document.getElementById('txn-count').textContent =
+        `${list.length} transaction${list.length === 1 ? '' : 's'}`;
+
+      document.getElementById('txn-rows').innerHTML = list.map(t => {
+        const c = custs.find(x => x.id === t.customerId);
+        const name = c ? displayName(c) : (t.customerName || 'Deleted customer');
+        return `
+        <tr>
+          <td>${formatDate(t.date)}</td>
+          <td>${esc(name)}</td>
+          <td class="num">${peso(t.amount)}</td>
+          <td class="num">${t.pointsEarned || 0}</td>
+          <td class="row-actions"><button class="btn danger" data-del="${esc(t.id)}">Delete</button></td>
+        </tr>`;
+      }).join('');
+    }
+
+    /* ---------- Record ---------- */
     document.getElementById('txn-form').addEventListener('submit', function (e) {
       e.preventDefault();
+      clearErrors();
+      let ok = true;
+
       const custId = custSelect.value;
       const custs = loadCustomers();
       const cust = custs.find(c => c.id === custId);
-      if (!cust) { toast('Add a customer first'); return; }
+      if (!cust) ok = setError('f-cust', 'Choose a customer.') && ok;
 
-      const amount = parseFloat(document.getElementById('txn-amount').value || '0');
+      const amount = parseFloat(amountInput.value);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        ok = setError('f-amount', 'Enter an amount greater than 0.') && ok;
+      } else if (amount > 1000000) {
+        ok = setError('f-amount', 'That amount looks too large. Check it again.') && ok;
+      }
+
       const date = document.getElementById('txn-date').value;
-      const pointsEarned = Math.floor(amount / settings.amountUnit) * settings.pointsPerAmount;
+      if (!date) ok = setError('f-date', 'Pick a date.') && ok;
+      else if (date > today()) ok = setError('f-date', 'Date cannot be in the future.') && ok;
 
-      // save transaction
+      if (!ok) return;
+
+      const rounded = Math.round(amount * 100) / 100;
+      const pointsEarned = pointsFor(rounded);
+
       const txns = loadTxns();
       txns.push({
-        id: cryptoId(), customerId: cust.id, customerName: cust.name,
-        amount, pointsEarned, date
+        id: cryptoId(),
+        customerId: cust.id,
+        customerName: displayName(cust),
+        amount: rounded,
+        pointsEarned,
+        date
       });
       saveTxns(txns);
 
-      // update customer points (threshold check / "point calculations")
       const before = cust.points || 0;
-      const after = before + pointsEarned;
-      cust.points = after;
+      cust.points = before + pointsEarned;
       saveCustomers(custs);
 
-      toast(`Recorded — ${cust.name} earned ${pointsEarned} pts`);
+      toast(`Recorded \u2014 ${displayName(cust)} earned ${pointsEarned} pts`);
       renderTxnTable();
-
-      // Threshold crossed this transaction -> offer a printable voucher.
-      if (before < settings.redeemThreshold && after >= settings.redeemThreshold) {
-        openVoucher(cust, after);
-      }
+      fillCustomerSelect();
 
       this.reset();
-      document.getElementById('txn-date').value = new Date().toISOString().slice(0, 10);
+      clearErrors();
+      document.getElementById('txn-date').value = today();
+      document.getElementById('points-preview').textContent = 'Earns 0 points';
+
+      if (before < settings.redeemThreshold && cust.points >= settings.redeemThreshold) {
+        offerRedeem(cust.id);
+      }
     });
 
+    /* ---------- Delete (ibinabalik ang points) ---------- */
     document.getElementById('txn-rows').addEventListener('click', function (e) {
-      const delId = e.target.getAttribute('data-del');
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      const delId = btn.getAttribute('data-del');
       if (!delId) return;
-      if (!confirm('Delete this transaction?')) return;
-      saveTxns(loadTxns().filter(t => t.id !== delId));
+
+      const txns = loadTxns();
+      const t = txns.find(x => x.id === delId);
+      if (!t) return;
+      if (!confirm(`Delete this ${peso(t.amount)} transaction? ${t.pointsEarned || 0} points will be taken back.`)) return;
+
+      const custs = loadCustomers();
+      const c = custs.find(x => x.id === t.customerId);
+      if (c) {
+        c.points = Math.max(0, (c.points || 0) - (t.pointsEarned || 0));
+        saveCustomers(custs);
+      }
+      saveTxns(txns.filter(x => x.id !== delId));
       renderTxnTable();
+      fillCustomerSelect();
       toast('Transaction deleted');
     });
 
-    function openVoucher(cust, points) {
-      document.getElementById('v-store').textContent = settings.storeName || 'MediSpa';
-      document.getElementById('v-points').textContent = points + ' pts';
-      document.getElementById('v-customer').textContent = 'Customer: ' + cust.name;
-      document.getElementById('v-meta').textContent = 'Issued ' + new Date().toLocaleDateString() + ' — present this voucher in store to redeem.';
-      if (confirm(cust.name + ' has reached ' + points + ' points and qualifies for a loyalty reward. Print a voucher now?')) {
-        window.print();
-      }
+    /* ---------- Redeem + voucher ---------- */
+    const modal = document.getElementById('voucher-modal');
+    document.getElementById('v-store').textContent =
+      (settings.storeName || 'MediSpa').toUpperCase() + ' REWARD VOUCHER';
+    document.getElementById('voucher-close').addEventListener('click', () => modal.classList.remove('open'));
+    document.getElementById('voucher-print').addEventListener('click', () => window.print());
+    modal.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('open'); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') modal.classList.remove('open'); });
+
+    function makeCode() {
+      return 'MS-' + today().replace(/-/g, '') + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
     }
+
+    function offerRedeem(custId) {
+      const custs = loadCustomers();
+      const cust = custs.find(c => c.id === custId);
+      if (!cust) return;
+      const cost = settings.redeemThreshold;
+      const msg = `${displayName(cust)} now has ${cust.points} points and qualifies for a reward. ` +
+                  `Redeem now? This uses ${cost} points.`;
+      if (!confirm(msg)) return;
+
+      cust.points = Math.max(0, (cust.points || 0) - cost);
+      saveCustomers(custs);
+
+      const code = makeCode();
+      const reds = loadRedemptions();
+      reds.push({
+        id: cryptoId(),
+        customerId: cust.id,
+        customerName: displayName(cust),
+        code,
+        points: cost,
+        date: today()
+      });
+      saveRedemptions(reds);
+
+      fillCustomerSelect();
+      toast('Reward redeemed');
+
+      document.getElementById('voucher-sub').textContent =
+        `${displayName(cust)} used ${cost} points. Remaining balance: ${cust.points} points.`;
+      document.getElementById('voucher-code').textContent = code;
+      document.getElementById('voucher-meta').textContent =
+        `Issued ${formatDate(today())} \u00B7 Present this code at the front desk`;
+      modal.classList.add('open');
+    }
+
+    renderTxnTable();
   </script>
 </body>
 </html>

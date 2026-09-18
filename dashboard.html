@@ -1,112 +1,179 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>MediSpa - Dashboard</title>
-<link rel="stylesheet" href="css/style.css">
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MediSpa - Dashboard</title><link rel="stylesheet" href="css/style.css">
+<style>
+  /* Small additions for the chart legend. Move these into css/style.css if you prefer. */
+  .chart-legend { display:flex; flex-wrap:wrap; gap:16px; margin:0 0 8px; font-size:12px; color:var(--text-muted, #6f7f86); }
+  .chart-legend span { display:inline-flex; align-items:center; gap:6px; }
+  .chart-legend i { display:inline-block; width:12px; height:12px; border-radius:3px; }
+  .chart-legend i.line { height:3px; width:16px; border-radius:2px; }
+</style>
 </head>
 <body>
-  <div class="app">
-    <div class="sidebar" id="sidebar-slot"></div>
-    <div class="main">
-      <div class="topbar" id="topbar-slot"></div>
-
-      <div class="kpi-row">
-        <div class="kpi-card">
-          <div class="kpi-label">Total Customers</div>
-          <div class="kpi-value" id="kpi-customers">0</div>
-        </div>
-        <div class="kpi-card">
-          <div class="kpi-label">Total Revenue</div>
-          <div class="kpi-value" id="kpi-revenue">0</div>
-        </div>
-        <div class="kpi-card">
-          <div class="kpi-label">Loyalty Members</div>
-          <div class="kpi-value" id="kpi-loyalty">0</div>
-        </div>
+<div class="app"><div class="sidebar" id="sidebar-slot"></div><main class="main">
+  <div class="topbar" id="topbar-slot"></div>
+  <div class="quick-actions">
+    <a class="btn solid" href="customers.html">+ Add Customer</a>
+    <a class="btn" href="transactions.html">+ Record Transaction</a>
+    <a class="btn" href="report.html">View Report</a>
+  </div>
+  <div class="kpi-row">
+    <div class="kpi-card"><div class="kpi-label">Total Customers</div><div class="kpi-value" id="kpi-customers">0</div><div class="kpi-sub">Registered customer records</div></div>
+    <div class="kpi-card"><div class="kpi-label">Total Revenue</div><div class="kpi-value" id="kpi-revenue">₱0.00</div><div class="kpi-sub">All recorded transactions</div></div>
+    <div class="kpi-card"><div class="kpi-label">Loyalty Members</div><div class="kpi-value" id="kpi-loyalty">0</div><div class="kpi-sub" id="kpi-loyalty-sub">Customers at the reward threshold</div></div>
+  </div>
+  <div class="content-row">
+    <section class="panel">
+      <div class="panel-head"><h2>Sales Overview</h2><span class="badge member" id="chart-badge">No sales yet</span></div>
+      <div class="chart-legend" id="chart-legend" aria-hidden="true">
+        <span><i style="background:#31b9b5"></i>Sales (₱)</span>
+        <span><i class="line" style="background:#c9a227"></i>Points earned</span>
       </div>
-
-      <div class="content-row">
-        <div class="panel">
-          <h2>Sales Overview</h2>
-          <canvas id="sales-canvas" width="600" height="220" style="width:100%;height:220px;"></canvas>
-        </div>
-        <div class="panel">
-          <h2>Recent Customer</h2>
-          <div class="recent-list" id="recent-list"></div>
-        </div>
-      </div>
+      <canvas id="sales-canvas" role="img" aria-label="Bar and line chart of daily sales and points earned" style="width:100%;height:240px;"></canvas>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><h2>Recent Customers</h2><a class="btn" href="customers.html">View all</a></div>
+      <div class="recent-list" id="recent-list"></div>
+    </section>
+  </div>
+  <div class="card" style="margin-top:18px;">
+    <div class="panel-head"><div><h2 style="margin-bottom:4px;">Loyalty Program</h2><div class="card-subtitle" style="margin:0;">Quick view of the current points rule and reward threshold.</div></div></div>
+    <div class="summary-strip">
+      <div class="mini-stat"><span>Earn rate</span><strong id="rule-points">10 pts</strong></div>
+      <div class="mini-stat"><span>Per purchase of</span><strong id="rule-unit">₱100</strong></div>
+      <div class="mini-stat"><span>Reward threshold</span><strong id="rule-threshold">100 pts</strong></div>
     </div>
   </div>
+</main></div>
+<script src="js/app.js"></script>
+<script>
+requireAuth(); renderShell('dashboard.html', 'Dashboard');
 
-  <script src="js/app.js"></script>
-  <script>
-    requireAuth();
-    renderShell('dashboard.html', 'Dashboard');
+/* ---------- helpers (local to this page) ---------- */
+const esc = s => String(s ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+// Display format is always "Last, First". "juan delacruz" -> "Delacruz, Juan"
+function fmtName(name) {
+  name = String(name || '').trim();
+  if (!name) return '-';
+  if (name.includes(',')) return name.split(',').map(p => p.trim().split(/\s+/).map(cap).join(' ')).join(', ');
+  const parts = name.split(/\s+/);
+  if (parts.length === 1) return cap(parts[0]);
+  const last = parts.pop();
+  return `${cap(last)}, ${parts.map(cap).join(' ')}`;
+}
 
-    const customers = readDB(DB_KEYS.customers, []);
-    const transactions = readDB(DB_KEYS.transactions, []);
-    const settings = readDB(DB_KEYS.settings, { redeemThreshold: 100 });
+/* ---------- data ---------- */
+const customers = readDB(DB_KEYS.customers, []);
+const transactions = readDB(DB_KEYS.transactions, []);
+const settings = Object.assign(
+  { redeemThreshold: 100, pointsPerAmount: 10, amountUnit: 100 },
+  readDB(DB_KEYS.settings, {})
+);
 
-    // KPIs
-    document.getElementById('kpi-customers').textContent = customers.length;
-    const totalRevenue = transactions.reduce((sum, t) => sum + Number(t.amount || 0), 0);
-    document.getElementById('kpi-revenue').textContent = money(totalRevenue);
-    const loyaltyMembers = customers.filter(c => (c.points || 0) >= settings.redeemThreshold).length;
-    document.getElementById('kpi-loyalty').textContent = loyaltyMembers;
+/* ---------- KPI cards ---------- */
+document.getElementById('kpi-customers').textContent = customers.length;
+const totalRevenue = transactions.reduce((sum, t) => sum + Number(t.amount || 0), 0);
+document.getElementById('kpi-revenue').textContent = '₱' + money(totalRevenue);
+const loyaltyMembers = customers.filter(c => (c.points || 0) >= settings.redeemThreshold).length;
+document.getElementById('kpi-loyalty').textContent = loyaltyMembers;
+document.getElementById('kpi-loyalty-sub').textContent = `Customers with ${settings.redeemThreshold}+ pts`;
 
-    // Recent customers (last joined first)
-    const recent = [...customers].sort((a, b) => (b.joined || '').localeCompare(a.joined || '')).slice(0, 5);
-    const listEl = document.getElementById('recent-list');
-    listEl.innerHTML = recent.length ? recent.map(c => `
-      <div class="recent-item"><span class="avatar">${initials(c.name)}</span>${c.name}</div>
-    `).join('') : '<div class="empty-state">No customers yet.</div>';
+/* ---------- Loyalty Program card (always from Settings) ---------- */
+document.getElementById('rule-points').textContent = settings.pointsPerAmount + ' pts';
+document.getElementById('rule-unit').textContent = '₱' + money(settings.amountUnit);
+document.getElementById('rule-threshold').textContent = settings.redeemThreshold + ' pts';
 
-    // Simple bar+line sales overview, grouped by day, drawn on canvas (no external charting library needed).
-    (function drawChart() {
-      const canvas = document.getElementById('sales-canvas');
-      const ctx = canvas.getContext('2d');
-      const byDate = {};
-      transactions.forEach(t => { byDate[t.date] = (byDate[t.date] || 0) + Number(t.amount || 0); });
-      const dates = Object.keys(byDate).sort();
-      const values = dates.map(d => byDate[d]);
-      const w = canvas.width, h = canvas.height, pad = 30;
+/* ---------- Recent customers ---------- */
+const recent = [...customers].sort((a, b) => (b.joined || '').localeCompare(a.joined || '')).slice(0, 5);
+document.getElementById('recent-list').innerHTML = recent.length
+  ? recent.map(c => `<div class="recent-item"><span class="avatar">${esc(initials(c.name))}</span><span>${esc(fmtName(c.name))}</span><span class="badge ${(c.points || 0) >= settings.redeemThreshold ? 'gold' : 'member'}" style="margin-left:auto">${c.points || 0} pts</span></div>`).join('')
+  : '<div class="empty-state">No customers yet. <a href="customers.html">Add your first customer</a>.</div>';
 
-      ctx.clearRect(0, 0, w, h);
-      if (!dates.length) {
-        ctx.fillStyle = '#5b6b85';
-        ctx.font = '13px sans-serif';
-        ctx.fillText('No transactions yet — add one on the Transaction page.', 20, h / 2);
-        return;
-      }
-      const max = Math.max(...values, 1);
-      const barW = (w - pad * 2) / dates.length * 0.6;
-      const gap = (w - pad * 2) / dates.length;
+/* ---------- Sales chart ---------- */
+const byDate = {};
+transactions.forEach(t => {
+  const d = byDate[t.date] || (byDate[t.date] = { sales: 0, points: 0 });
+  d.sales += Number(t.amount || 0);
+  d.points += Number(t.pointsEarned || 0);
+});
+let chartDates = Object.keys(byDate).sort();
+if (chartDates.length > 10) chartDates = chartDates.slice(-10);
+document.getElementById('chart-badge').textContent =
+  chartDates.length ? `Last ${chartDates.length} sales day${chartDates.length === 1 ? '' : 's'}` : 'No sales yet';
+if (!chartDates.length) document.getElementById('chart-legend').style.display = 'none';
 
-      dates.forEach((d, i) => {
-        const val = values[i];
-        const barH = (val / max) * (h - pad * 2);
-        const x = pad + i * gap + (gap - barW) / 2;
-        const y = h - pad - barH;
-        ctx.fillStyle = '#2f5dae';
-        ctx.fillRect(x, y, barW, barH);
-        ctx.fillStyle = '#5b6b85';
-        ctx.font = '10px sans-serif';
-        ctx.fillText(d.slice(5), x - 4, h - pad + 12);
-      });
+const niceCeil = v => {
+  v = Math.max(v, 1);
+  const p = Math.pow(10, Math.floor(Math.log10(v))), n = v / p;
+  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p;
+};
+const compactPeso = v => v >= 1000 ? '₱' + (+(v / 1000).toFixed(1)) + 'k' : '₱' + Math.round(v);
+const shortDate = d => new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
-      // trend line
-      ctx.beginPath();
-      ctx.strokeStyle = '#c94f4f';
-      ctx.lineWidth = 1.5;
-      dates.forEach((d, i) => {
-        const val = values[i];
-        const x = pad + i * gap + gap / 2;
-        const y = h - pad - (val / max) * (h - pad * 2);
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-      });
-      ctx.stroke();
-    })();
-  </script>
-</body>
-</html>
+function drawChart() {
+  const canvas = document.getElementById('sales-canvas');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth || 700, h = 240;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  ctx.font = '11px "Segoe UI", sans-serif';
+
+  if (!chartDates.length) {
+    ctx.fillStyle = '#6f7f86';
+    ctx.fillText('No transactions yet. Record a transaction to see sales here.', 20, h / 2);
+    return;
+  }
+
+  const padL = 52, padR = 44, padT = 12, padB = 30;
+  const plotW = w - padL - padR, plotH = h - padT - padB;
+  const sales = chartDates.map(d => byDate[d].sales);
+  const pts = chartDates.map(d => byDate[d].points);
+  const maxS = niceCeil(Math.max(...sales)), maxP = niceCeil(Math.max(...pts));
+  const gap = plotW / chartDates.length, barW = Math.min(gap * 0.55, 56);
+
+  // gridlines + axis labels (left = sales in peso, right = points)
+  for (let i = 0; i <= 4; i++) {
+    const y = padT + plotH - (i / 4) * plotH;
+    ctx.strokeStyle = '#e8eeee'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke();
+    ctx.fillStyle = '#6f7f86'; ctx.textAlign = 'right';
+    ctx.fillText(compactPeso((maxS / 4) * i), padL - 8, y + 4);
+    ctx.fillStyle = '#a5851c'; ctx.textAlign = 'left';
+    ctx.fillText(String(Math.round((maxP / 4) * i)), w - padR + 8, y + 4);
+  }
+
+  // bars + x labels (skip labels when there is no room)
+  const step = Math.max(1, Math.ceil(46 / gap));
+  chartDates.forEach((d, i) => {
+    const barH = (sales[i] / maxS) * plotH;
+    const cx = padL + i * gap + gap / 2;
+    ctx.fillStyle = '#31b9b5';
+    ctx.fillRect(cx - barW / 2, padT + plotH - barH, barW, barH);
+    if (i % step === 0) {
+      ctx.fillStyle = '#6f7f86'; ctx.textAlign = 'center';
+      ctx.fillText(shortDate(d), cx, h - padB + 16);
+    }
+  });
+
+  // points line on the right axis
+  ctx.beginPath(); ctx.strokeStyle = '#c9a227'; ctx.lineWidth = 2;
+  chartDates.forEach((d, i) => {
+    const x = padL + i * gap + gap / 2, y = padT + plotH - (pts[i] / maxP) * plotH;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+  chartDates.forEach((d, i) => {
+    const x = padL + i * gap + gap / 2, y = padT + plotH - (pts[i] / maxP) * plotH;
+    ctx.beginPath(); ctx.fillStyle = '#c9a227'; ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
+  });
+}
+drawChart();
+let resizeTimer;
+window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(drawChart, 120); });
+</script>
+</body></html>

@@ -2,8 +2,38 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MediSpa - Settings</title>
 <link rel="stylesheet" href="css/style.css">
+<style>
+  .form-grid { align-items: start; }
+  .field { position: relative; padding-bottom: 20px; }
+  .field .hint,
+  .field .err {
+    position: absolute; top: 100%; left: 0; margin-top: -16px;
+    font-size: 12px; line-height: 1.3;
+  }
+  .field .hint { opacity: .65; }
+  .field .err { color: #c0392b; display: none; }
+  .field.invalid input { border-color: #c0392b; }
+  .field.invalid .err { display: block; }
+  .field.invalid .hint { display: none; }
+
+  .field .pw-row { display: flex; gap: 6px; }
+  .field .pw-row input { flex: 1; }
+  .field .pw-toggle { white-space: nowrap; padding: 0 10px; }
+
+  .rule-preview {
+    font-size: 12px; color: var(--text-muted, #667); margin-top: 10px;
+    background: #F6F4EE; border-radius: 8px; padding: 8px 12px;
+  }
+
+  @media (max-width: 900px) { .form-grid { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 640px) {
+    .form-grid { grid-template-columns: 1fr; }
+    .form-grid .btn { width: 100%; }
+  }
+</style>
 </head>
 <body>
   <div class="app">
@@ -12,29 +42,76 @@
       <div class="topbar" id="topbar-slot"></div>
 
       <div class="card">
-        <h2>Store &amp; Loyalty Settings</h2>
-        <form id="settings-form" class="form-grid">
-          <div class="field"><label>Store name</label><input id="s-name"></div>
-          <div class="field"><label>Points earned</label><input id="s-points" type="number" min="1"></div>
-          <div class="field"><label>Per amount spent</label><input id="s-unit" type="number" min="1"></div>
-          <div class="field"><label>Redeem threshold (points)</label><input id="s-threshold" type="number" min="1"></div>
-          <button class="btn solid" type="submit">Save Settings</button>
+        <h2>Store &amp; loyalty settings</h2>
+        <div class="card-subtitle">Configure the points rules used by the customer loyalty system.</div>
+        <form id="settings-form" class="form-grid" novalidate>
+          <div class="field" id="f-name">
+            <label for="s-name">Store name</label>
+            <input id="s-name">
+            <div class="err" id="e-name"></div>
+          </div>
+          <div class="field" id="f-currency">
+            <label for="s-currency">Currency symbol</label>
+            <input id="s-currency" maxlength="3">
+            <div class="err" id="e-currency"></div>
+          </div>
+          <div class="field" id="f-points">
+            <label for="s-points">Points earned</label>
+            <input id="s-points" type="number" min="1" step="1">
+            <div class="err" id="e-points"></div>
+          </div>
+          <div class="field" id="f-unit">
+            <label for="s-unit">Per amount spent</label>
+            <input id="s-unit" type="number" min="1" step="0.01">
+            <div class="err" id="e-unit"></div>
+          </div>
+          <div class="field" id="f-threshold">
+            <label for="s-threshold">Redeem threshold (points)</label>
+            <input id="s-threshold" type="number" min="1" step="1">
+            <div class="err" id="e-threshold"></div>
+          </div>
+          <button class="btn solid" type="submit">Save settings</button>
+        </form>
+        <div class="rule-preview" id="rule-preview"></div>
+      </div>
+
+      <div class="card">
+        <h2>Change password</h2>
+        <div class="card-subtitle">Update the demo account password used for this browser.</div>
+        <form id="password-form" class="form-grid" novalidate>
+          <div class="field" id="f-current">
+            <label for="p-current">Current password</label>
+            <div class="pw-row">
+              <input id="p-current" type="password" autocomplete="current-password">
+              <button class="btn pw-toggle" type="button" data-toggle="p-current">Show</button>
+            </div>
+            <div class="err" id="e-current"></div>
+          </div>
+          <div class="field" id="f-new">
+            <label for="p-new">New password</label>
+            <div class="pw-row">
+              <input id="p-new" type="password" autocomplete="new-password">
+              <button class="btn pw-toggle" type="button" data-toggle="p-new">Show</button>
+            </div>
+            <div class="hint">At least 6 characters</div>
+            <div class="err" id="e-new"></div>
+          </div>
+          <div class="field" id="f-confirm">
+            <label for="p-confirm">Confirm new password</label>
+            <div class="pw-row">
+              <input id="p-confirm" type="password" autocomplete="new-password">
+              <button class="btn pw-toggle" type="button" data-toggle="p-confirm">Show</button>
+            </div>
+            <div class="err" id="e-confirm"></div>
+          </div>
+          <button class="btn solid" type="submit">Update password</button>
         </form>
       </div>
 
       <div class="card">
-        <h2>Change Password</h2>
-        <form id="password-form" class="form-grid">
-          <div class="field"><label>Current password</label><input id="p-current" type="password" required></div>
-          <div class="field"><label>New password</label><input id="p-new" type="password" required></div>
-          <button class="btn solid" type="submit">Update Password</button>
-        </form>
-      </div>
-
-      <div class="card">
-        <h2>Demo Data</h2>
+        <h2>Demo data</h2>
         <p style="font-size:13px;color:var(--text-muted)">Everything is stored in this browser only (LocalStorage). Use this to wipe and reseed with sample data.</p>
-        <button class="btn danger" id="reset-btn">Reset All Data</button>
+        <button class="btn danger" id="reset-btn" type="button">Reset all data</button>
       </div>
     </div>
   </div>
@@ -42,48 +119,157 @@
   <script src="js/app.js"></script>
   <script>
     const session = requireAuth();
-    renderShell('settings.html', 'Setting');
+    renderShell('settings.html', 'Settings');
 
-    const settingsForm = document.getElementById('settings-form');
-    function loadSettingsIntoForm() {
+    const RED_KEY = DB_KEYS.redemptions || 'medispa_redemptions';
+
+    /* ---------- Helpers ---------- */
+    function setError(fieldId, msg) {
+      const f = document.getElementById(fieldId);
+      const e = document.getElementById(fieldId.replace('f-', 'e-'));
+      if (msg) { f.classList.add('invalid'); e.textContent = msg; }
+      else { f.classList.remove('invalid'); e.textContent = ''; }
+      return !msg;
+    }
+    function clearErrors(ids) { ids.forEach(id => setError(id, '')); }
+
+    /* ---------- Settings form ---------- */
+    // Tanggap ang luma at bagong key names para hindi masira ang ibang pages.
+    function readSettings() {
       const s = readDB(DB_KEYS.settings, {});
-      document.getElementById('s-name').value = s.storeName || 'MediSpa';
-      document.getElementById('s-points').value = s.pointsPerAmount || 10;
-      document.getElementById('s-unit').value = s.amountUnit || 100;
-      document.getElementById('s-threshold').value = s.redeemThreshold || 100;
+      return {
+        storeName: s.storeName || 'MediSpa',
+        currency: s.currency || '\u20B1',
+        pointsPer: s.pointsPer ?? s.pointsPerAmount ?? 12,
+        spendPer: s.spendPer ?? s.amountUnit ?? 110,
+        redeemThreshold: s.redeemThreshold ?? 100
+      };
+    }
+
+    function updatePreview(s) {
+      document.getElementById('rule-preview').textContent =
+        `Customers earn ${s.pointsPer} point${s.pointsPer === 1 ? '' : 's'} for every ${s.currency}${s.spendPer} spent, ` +
+        `and can redeem a reward once they reach ${s.redeemThreshold} points.`;
+    }
+
+    function loadSettingsIntoForm() {
+      const s = readSettings();
+      document.getElementById('s-name').value = s.storeName;
+      document.getElementById('s-currency').value = s.currency;
+      document.getElementById('s-points').value = s.pointsPer;
+      document.getElementById('s-unit').value = s.spendPer;
+      document.getElementById('s-threshold').value = s.redeemThreshold;
+      updatePreview(s);
     }
     loadSettingsIntoForm();
 
-    settingsForm.addEventListener('submit', function (e) {
-      e.preventDefault();
-      writeDB(DB_KEYS.settings, {
-        storeName: document.getElementById('s-name').value.trim() || 'MediSpa',
-        pointsPerAmount: parseInt(document.getElementById('s-points').value || '10', 10),
-        amountUnit: parseInt(document.getElementById('s-unit').value || '100', 10),
-        redeemThreshold: parseInt(document.getElementById('s-threshold').value || '100', 10)
+    const settingsFieldIds = ['f-name', 'f-currency', 'f-points', 'f-unit', 'f-threshold'];
+    ['s-name', 's-currency', 's-points', 's-unit', 's-threshold'].forEach(id => {
+      document.getElementById(id).addEventListener('input', () => {
+        const s = collectSettingsDraft();
+        if (s) updatePreview(s);
       });
+    });
+
+    function collectSettingsDraft() {
+      const points = parseFloat(document.getElementById('s-points').value);
+      const unit = parseFloat(document.getElementById('s-unit').value);
+      const threshold = parseFloat(document.getElementById('s-threshold').value);
+      return {
+        storeName: document.getElementById('s-name').value.trim() || 'MediSpa',
+        currency: document.getElementById('s-currency').value.trim() || '\u20B1',
+        pointsPer: Number.isFinite(points) ? points : 0,
+        spendPer: Number.isFinite(unit) ? unit : 0,
+        redeemThreshold: Number.isFinite(threshold) ? threshold : 0
+      };
+    }
+
+    document.getElementById('settings-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      clearErrors(settingsFieldIds);
+      let ok = true;
+
+      const name = document.getElementById('s-name').value.trim();
+      if (!name) ok = setError('f-name', 'Store name is required.') && ok;
+
+      const currency = document.getElementById('s-currency').value.trim();
+      if (!currency) ok = setError('f-currency', 'Enter a currency symbol, e.g. \u20B1.') && ok;
+
+      const points = parseFloat(document.getElementById('s-points').value);
+      if (!Number.isFinite(points) || points < 1) ok = setError('f-points', 'Must be 1 or more.') && ok;
+
+      const unit = parseFloat(document.getElementById('s-unit').value);
+      if (!Number.isFinite(unit) || unit <= 0) ok = setError('f-unit', 'Must be greater than 0.') && ok;
+
+      const threshold = parseFloat(document.getElementById('s-threshold').value);
+      if (!Number.isFinite(threshold) || threshold < 1) ok = setError('f-threshold', 'Must be 1 or more.') && ok;
+
+      if (!ok) return;
+
+      writeDB(DB_KEYS.settings, {
+        storeName: name || 'MediSpa',
+        currency,
+        pointsPer: points,
+        spendPer: unit,
+        redeemThreshold: threshold,
+        // legacy mirrors, in case an un-updated page still reads these
+        pointsPerAmount: points,
+        amountUnit: unit
+      });
+      updatePreview({ storeName: name, currency, pointsPer: points, spendPer: unit, redeemThreshold: threshold });
       toast('Settings saved');
+    });
+
+    /* ---------- Password form ---------- */
+    const pwFieldIds = ['f-current', 'f-new', 'f-confirm'];
+
+    document.querySelectorAll('.pw-toggle').forEach(btn => {
+      btn.addEventListener('click', function () {
+        const input = document.getElementById(this.getAttribute('data-toggle'));
+        const show = input.type === 'password';
+        input.type = show ? 'text' : 'password';
+        this.textContent = show ? 'Hide' : 'Show';
+      });
     });
 
     document.getElementById('password-form').addEventListener('submit', function (e) {
       e.preventDefault();
+      clearErrors(pwFieldIds);
+      let ok = true;
+
       const users = readDB(DB_KEYS.users, []);
       const idx = users.findIndex(u => u.username === session.username);
       const current = document.getElementById('p-current').value;
       const next = document.getElementById('p-new').value;
-      if (idx === -1 || users[idx].password !== current) {
-        toast('Current password is incorrect');
-        return;
+      const confirm = document.getElementById('p-confirm').value;
+
+      if (!current) ok = setError('f-current', 'Enter your current password.') && ok;
+      else if (idx === -1 || users[idx].password !== current) {
+        ok = setError('f-current', 'Current password is incorrect.') && ok;
       }
+
+      if (!next) ok = setError('f-new', 'Enter a new password.') && ok;
+      else if (next.length < 6) ok = setError('f-new', 'Use at least 6 characters.') && ok;
+      else if (idx > -1 && next === current) ok = setError('f-new', 'New password must be different from the current one.') && ok;
+
+      if (!confirm) ok = setError('f-confirm', 'Confirm the new password.') && ok;
+      else if (next && confirm !== next) ok = setError('f-confirm', 'Passwords do not match.') && ok;
+
+      if (!ok) return;
+
       users[idx].password = next;
       writeDB(DB_KEYS.users, users);
       this.reset();
+      document.querySelectorAll('.pw-toggle').forEach(b => { b.textContent = 'Show'; });
+      document.querySelectorAll('#password-form input[type="text"]').forEach(i => { i.type = 'password'; });
       toast('Password updated');
     });
 
+    /* ---------- Reset demo data ---------- */
     document.getElementById('reset-btn').addEventListener('click', function () {
-      if (!confirm('This will erase all customers, transactions, and settings in this browser. Continue?')) return;
+      if (!confirm('This will erase all customers, transactions, redemptions, and settings in this browser. Continue?')) return;
       Object.values(DB_KEYS).forEach(k => { if (k !== DB_KEYS.session) localStorage.removeItem(k); });
+      localStorage.removeItem(RED_KEY);
       seedIfEmpty();
       loadSettingsIntoForm();
       toast('Data reset to sample data');

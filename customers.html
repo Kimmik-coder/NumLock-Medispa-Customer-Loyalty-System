@@ -2,8 +2,69 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>MediSpa - Customer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MediSpa - Customers</title>
 <link rel="stylesheet" href="css/style.css">
+<style>
+  /* ---- Page-scoped additions. Pwede mong ilipat sa css/style.css mamaya. ---- */
+  /* Pareho ang taas ng lahat ng field: hindi nagtutulak ang hint/error text */
+  .form-grid { align-items: start; }
+  .field { position: relative; padding-bottom: 20px; }
+  .field .hint,
+  .field .err {
+    position: absolute; top: 100%; left: 0; margin-top: -16px;
+    font-size: 12px; line-height: 1.3;
+  }
+  .field .hint { opacity: .65; }
+  .field .err { color: #c0392b; display: none; }
+  .field.invalid input { border-color: #c0392b; }
+  .field.invalid .err { display: block; }
+  .field.invalid .hint { display: none; }
+
+  .row-actions { white-space: nowrap; }
+  .row-actions .btn { margin-left: 4px; }
+  .btn.gold { border-color: #c79a2e; color: #8a6a10; }
+  .btn.gold:hover { background: #fdf6e3; }
+
+  .panel-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+  /* Voucher modal */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(15,23,32,.45);
+    display: none; align-items: center; justify-content: center; padding: 16px; z-index: 60;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: #fff; border-radius: 14px; padding: 24px; width: 100%; max-width: 420px;
+    box-shadow: 0 18px 50px rgba(0,0,0,.2);
+  }
+  .voucher {
+    border: 2px dashed #c79a2e; border-radius: 12px; padding: 18px; text-align: center;
+    background: #fffdf5; margin: 14px 0;
+  }
+  .voucher .code {
+    font-size: 22px; letter-spacing: 2px; font-weight: 700; margin: 6px 0;
+  }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .form-grid { grid-template-columns: 1fr 1fr; }
+    .search-row { flex-wrap: wrap; }
+  }
+  @media (max-width: 640px) {
+    .form-grid { grid-template-columns: 1fr; }
+    .form-grid .btn { width: 100%; }
+    .panel-head { flex-direction: column; align-items: flex-start; gap: 8px; }
+    .search-row input, .search-row .filter-select { width: 100%; }
+    .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .table-wrap table { min-width: 720px; }
+  }
+  @media print {
+    .sidebar, .topbar, .modal-actions { display: none !important; }
+    .modal-backdrop { position: static; background: none; }
+  }
+</style>
 </head>
 <body>
   <div class="app">
@@ -12,27 +73,85 @@
       <div class="topbar" id="topbar-slot"></div>
 
       <div class="card">
-        <h2 id="form-title">Add Customer</h2>
-        <form id="customer-form" class="form-grid">
+        <h2 id="form-title">Add customer</h2>
+        <form id="customer-form" class="form-grid" novalidate>
           <input type="hidden" id="cust-id">
-          <div class="field"><label>Full name</label><input id="cust-name" required></div>
-          <div class="field"><label>Phone</label><input id="cust-phone"></div>
-          <div class="field"><label>Email</label><input id="cust-email" type="email"></div>
-          <div class="field"><label>Starting points</label><input id="cust-points" type="number" min="0" value="0"></div>
-          <button class="btn solid" type="submit" id="save-btn">Add Customer</button>
+          <div class="field" id="f-first">
+            <label for="cust-first">First name</label>
+            <input id="cust-first" autocomplete="given-name">
+            <div class="err" id="e-first"></div>
+          </div>
+          <div class="field" id="f-last">
+            <label for="cust-last">Last name</label>
+            <input id="cust-last" autocomplete="family-name">
+            <div class="err" id="e-last"></div>
+          </div>
+          <div class="field" id="f-phone">
+            <label for="cust-phone">Phone</label>
+            <input id="cust-phone" inputmode="numeric" placeholder="0917-000-0000">
+            <div class="hint">11 digits, starts with 09</div>
+            <div class="err" id="e-phone"></div>
+          </div>
+          <div class="field" id="f-email">
+            <label for="cust-email">Email</label>
+            <input id="cust-email" type="email" placeholder="name@example.com">
+            <div class="err" id="e-email"></div>
+          </div>
+          <div class="field" id="f-points">
+            <label for="cust-points">Starting points</label>
+            <input id="cust-points" type="number" min="0" step="1" value="0">
+            <div class="err" id="e-points"></div>
+          </div>
+          <button class="btn solid" type="submit" id="save-btn">Add customer</button>
           <button class="btn" type="button" id="cancel-edit" style="display:none;">Cancel</button>
         </form>
       </div>
 
       <div class="card">
-        <h2>All Customers</h2>
-        <table>
+        <div class="panel-head">
+          <div>
+            <h2 style="margin-bottom:4px;">All customers</h2>
+            <div class="card-subtitle" style="margin:0;">Search, edit, and redeem rewards for your customers.</div>
+          </div>
+          <div class="panel-tools">
+            <button class="btn" type="button" id="recalc-btn" title="Recompute points from transactions and redemptions">Recalculate points</button>
+            <span class="badge member" id="customer-count">0 customers</span>
+          </div>
+        </div>
+
+        <div class="search-row">
+          <input id="customer-search" type="search" placeholder="Search name, phone, or email...">
+          <select class="filter-select" id="status-filter">
+            <option value="all">All statuses</option>
+            <option value="ready">Loyalty Ready</option>
+            <option value="member">Member</option>
+          </select>
+        </div>
+
+        <div class="table-wrap"><table>
           <thead>
             <tr><th>Name</th><th>Phone</th><th>Email</th><th>Points</th><th>Status</th><th>Joined</th><th></th></tr>
           </thead>
           <tbody id="cust-rows"></tbody>
-        </table>
-        <div id="cust-empty" class="empty-state" style="display:none;">No customers yet — add your first one above.</div>
+        </table></div>
+        <div id="cust-empty" class="empty-state" style="display:none;">No customers match your search. Clear the filter or add a new customer.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Voucher modal -->
+  <div class="modal-backdrop" id="voucher-modal" role="dialog" aria-modal="true" aria-labelledby="voucher-title">
+    <div class="modal">
+      <h2 id="voucher-title" style="margin-top:0;">Reward redeemed</h2>
+      <p class="card-subtitle" id="voucher-sub" style="margin-top:4px;"></p>
+      <div class="voucher">
+        <div style="font-size:12px;letter-spacing:1px;">MEDISPA REWARD VOUCHER</div>
+        <div class="code" id="voucher-code">—</div>
+        <div id="voucher-meta" style="font-size:13px;"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" type="button" id="voucher-print">Print</button>
+        <button class="btn solid" type="button" id="voucher-close">Done</button>
       </div>
     </div>
   </div>
@@ -40,60 +159,183 @@
   <script src="js/app.js"></script>
   <script>
     requireAuth();
-    renderShell('customers.html', 'Customer');
+    renderShell('customers.html', 'Customers');
 
-    const settings = readDB(DB_KEYS.settings, { redeemThreshold: 100 });
+    /* ---------- Settings & keys ---------- */
+    const settings = Object.assign(
+      { redeemThreshold: 100, pointsPer: 12, spendPer: 110, currency: '\u20B1' },
+      readDB(DB_KEYS.settings, {})
+    );
+    const TX_KEY  = DB_KEYS.transactions || 'medispa_transactions';
+    const RED_KEY = DB_KEYS.redemptions  || 'medispa_redemptions';
 
-    function loadCustomers() { return readDB(DB_KEYS.customers, []); }
-    function saveCustomers(list) { writeDB(DB_KEYS.customers, list); }
+    /* ---------- Helpers ---------- */
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, m => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]
+    ));
 
+    function titleCase(s) {
+      return s.trim().replace(/\s+/g, ' ')
+        .toLowerCase()
+        .replace(/(^|[\s'-])([a-z\u00E0-\u00FF])/g, (m, a, b) => a + b.toUpperCase());
+    }
+
+    function digits(s) { return String(s || '').replace(/\D/g, ''); }
+
+    function formatPhone(raw) {
+      let d = digits(raw);
+      if (d.startsWith('63') && d.length === 12) d = '0' + d.slice(2);
+      if (d.length !== 11) return null;
+      return d.slice(0, 4) + '-' + d.slice(4, 7) + '-' + d.slice(7);
+    }
+
+    function formatDate(iso) {
+      if (!iso) return '-';
+      const d = new Date(iso);
+      if (isNaN(d)) return esc(iso);
+      return d.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: '2-digit' });
+    }
+
+    function pointsFor(amount) {
+      const a = Number(amount) || 0;
+      return Math.floor(a / settings.spendPer) * settings.pointsPer;
+    }
+
+    const loadCustomers = () => readDB(DB_KEYS.customers, []);
+    const saveCustomers = list => writeDB(DB_KEYS.customers, list);
+    const loadRedemptions = () => readDB(RED_KEY, []);
+    const saveRedemptions = list => writeDB(RED_KEY, list);
+
+    function displayName(c) {
+      if (c.lastName || c.firstName) return `${c.lastName || ''}${c.lastName && c.firstName ? ', ' : ''}${c.firstName || ''}`;
+      return c.name || '-';
+    }
+
+    /* ---------- Validation ---------- */
+    function setError(fieldId, msg) {
+      const f = document.getElementById(fieldId);
+      const e = document.getElementById(fieldId.replace('f-', 'e-'));
+      if (msg) { f.classList.add('invalid'); e.textContent = msg; }
+      else { f.classList.remove('invalid'); e.textContent = ''; }
+      return !msg;
+    }
+
+    function clearErrors() {
+      ['f-first', 'f-last', 'f-phone', 'f-email', 'f-points'].forEach(id => setError(id, ''));
+    }
+
+    function validate(values, editingId) {
+      clearErrors();
+      let ok = true;
+      const list = loadCustomers();
+
+      if (!values.firstName) ok = setError('f-first', 'First name is required.') && ok;
+      if (!values.lastName)  ok = setError('f-last', 'Last name is required.') && ok;
+
+      if (!values.phone) {
+        ok = setError('f-phone', 'Phone is required.') && ok;
+      } else if (!formatPhone(values.phone)) {
+        ok = setError('f-phone', 'Use 11 digits starting with 09, e.g. 0917-000-0000.') && ok;
+      } else {
+        const p = formatPhone(values.phone);
+        if (list.some(c => c.id !== editingId && c.phone === p)) {
+          ok = setError('f-phone', 'Another customer already uses this number.') && ok;
+        }
+      }
+
+      if (values.email) {
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(values.email)) {
+          ok = setError('f-email', 'Enter a valid email address.') && ok;
+        } else if (list.some(c => c.id !== editingId && (c.email || '').toLowerCase() === values.email.toLowerCase())) {
+          ok = setError('f-email', 'Another customer already uses this email.') && ok;
+        }
+      }
+
+      if (!Number.isFinite(values.points) || values.points < 0) {
+        ok = setError('f-points', 'Points must be 0 or higher.') && ok;
+      }
+      return ok;
+    }
+
+    /* ---------- Table ---------- */
     function renderTable() {
       const list = loadCustomers();
-      const rows = document.getElementById('cust-rows');
-      document.getElementById('cust-empty').style.display = list.length ? 'none' : 'block';
-      rows.innerHTML = list.map(c => `
+      const query = (document.getElementById('customer-search').value || '').toLowerCase().trim();
+      const filter = document.getElementById('status-filter').value;
+
+      const filtered = list.filter(c => {
+        const hay = `${displayName(c)} ${c.phone || ''} ${c.email || ''}`.toLowerCase();
+        const ready = (c.points || 0) >= settings.redeemThreshold;
+        return (!query || hay.includes(query)) && (filter === 'all' || (filter === 'ready' ? ready : !ready));
+      });
+
+      document.getElementById('customer-count').textContent =
+        `${filtered.length} of ${list.length} customers`;
+      document.getElementById('cust-empty').style.display = filtered.length ? 'none' : 'block';
+
+      document.getElementById('cust-rows').innerHTML = filtered.map(c => {
+        const pts = c.points || 0;
+        const ready = pts >= settings.redeemThreshold;
+        return `
         <tr>
-          <td>${c.name}</td>
-          <td>${c.phone || '-'}</td>
-          <td>${c.email || '-'}</td>
-          <td>${c.points || 0}</td>
-          <td>${(c.points || 0) >= settings.redeemThreshold
+          <td>${esc(displayName(c))}</td>
+          <td>${esc(c.phone || '-')}</td>
+          <td>${esc(c.email || '-')}</td>
+          <td>${pts}</td>
+          <td>${ready
               ? '<span class="badge gold">Loyalty Ready</span>'
               : '<span class="badge member">Member</span>'}</td>
-          <td>${c.joined || '-'}</td>
+          <td>${formatDate(c.joined)}</td>
           <td class="row-actions">
-            <button class="btn" data-edit="${c.id}">Edit</button>
-            <button class="btn danger" data-del="${c.id}">Delete</button>
+            ${ready ? `<button class="btn gold" data-redeem="${esc(c.id)}">Redeem</button>` : ''}
+            <button class="btn" data-edit="${esc(c.id)}">Edit</button>
+            <button class="btn danger" data-del="${esc(c.id)}">Delete</button>
           </td>
-        </tr>
-      `).join('');
+        </tr>`;
+      }).join('');
     }
-    renderTable();
 
+    /* ---------- Form ---------- */
     const form = document.getElementById('customer-form');
     const cancelBtn = document.getElementById('cancel-edit');
 
+    document.getElementById('cust-phone').addEventListener('blur', function () {
+      const p = formatPhone(this.value);
+      if (p) this.value = p;
+    });
+
     form.addEventListener('submit', function (e) {
       e.preventDefault();
-      const list = loadCustomers();
       const id = document.getElementById('cust-id').value;
-      const name = document.getElementById('cust-name').value.trim();
-      if (!name) return;
-      const phone = document.getElementById('cust-phone').value.trim();
-      const email = document.getElementById('cust-email').value.trim();
-      const points = parseInt(document.getElementById('cust-points').value || '0', 10);
+      const values = {
+        firstName: titleCase(document.getElementById('cust-first').value),
+        lastName:  titleCase(document.getElementById('cust-last').value),
+        phone:     document.getElementById('cust-phone').value.trim(),
+        email:     document.getElementById('cust-email').value.trim(),
+        points:    parseInt(document.getElementById('cust-points').value || '0', 10)
+      };
+      if (!validate(values, id)) return;
+
+      const list = loadCustomers();
+      const record = {
+        firstName: values.firstName,
+        lastName: values.lastName,
+        name: `${values.lastName}, ${values.firstName}`,
+        phone: formatPhone(values.phone),
+        email: values.email,
+        points: values.points
+      };
 
       if (id) {
         const idx = list.findIndex(c => c.id === id);
-        if (idx > -1) {
-          list[idx] = { ...list[idx], name, phone, email, points };
-        }
+        if (idx > -1) list[idx] = Object.assign({}, list[idx], record);
         toast('Customer updated');
       } else {
-        list.push({
-          id: cryptoId(), name, phone, email, points,
+        list.push(Object.assign({
+          id: cryptoId(),
+          startingPoints: values.points,
           joined: new Date().toISOString().slice(0, 10)
-        });
+        }, record));
         toast('Customer added');
       }
       saveCustomers(list);
@@ -104,38 +346,126 @@
     function resetForm() {
       document.getElementById('cust-id').value = '';
       form.reset();
-      document.getElementById('form-title').textContent = 'Add Customer';
-      document.getElementById('save-btn').textContent = 'Add Customer';
+      clearErrors();
+      document.getElementById('cust-points').value = 0;
+      document.getElementById('form-title').textContent = 'Add customer';
+      document.getElementById('save-btn').textContent = 'Add customer';
       cancelBtn.style.display = 'none';
     }
     cancelBtn.addEventListener('click', resetForm);
 
+    /* ---------- Redeem + voucher ---------- */
+    const modal = document.getElementById('voucher-modal');
+
+    function openVoucher(customer, code, cost) {
+      document.getElementById('voucher-sub').textContent =
+        `${displayName(customer)} used ${cost} points. Remaining balance: ${customer.points} points.`;
+      document.getElementById('voucher-code').textContent = code;
+      document.getElementById('voucher-meta').textContent =
+        `Issued ${formatDate(new Date().toISOString())} \u00B7 Present this code at the front desk`;
+      modal.classList.add('open');
+    }
+    document.getElementById('voucher-close').addEventListener('click', () => modal.classList.remove('open'));
+    document.getElementById('voucher-print').addEventListener('click', () => window.print());
+    modal.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('open'); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') modal.classList.remove('open'); });
+
+    function makeCode() {
+      const d = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const r = Math.random().toString(36).slice(2, 6).toUpperCase();
+      return `MS-${d}-${r}`;
+    }
+
+    function redeem(id) {
+      const list = loadCustomers();
+      const c = list.find(x => x.id === id);
+      if (!c) return;
+      const cost = settings.redeemThreshold;
+      if ((c.points || 0) < cost) { toast('Not enough points to redeem'); return; }
+      if (!confirm(`Redeem a reward for ${displayName(c)}? This uses ${cost} points.`)) return;
+
+      c.points = (c.points || 0) - cost;
+      const code = makeCode();
+      const reds = loadRedemptions();
+      reds.push({
+        id: cryptoId(),
+        customerId: c.id,
+        customerName: displayName(c),
+        code,
+        points: cost,
+        date: new Date().toISOString().slice(0, 10)
+      });
+      saveRedemptions(reds);
+      saveCustomers(list);
+      renderTable();
+      toast('Reward redeemed');
+      openVoucher(c, code, cost);
+    }
+
+    /* ---------- Recalculate points from transactions ---------- */
+    document.getElementById('recalc-btn').addEventListener('click', function () {
+      if (!confirm('Recompute every customer\u2019s points from their transactions and redemptions?')) return;
+      const list = loadCustomers();
+      const tx = readDB(TX_KEY, []);
+      const reds = loadRedemptions();
+
+      list.forEach(c => {
+        const earned = tx
+          .filter(t => (t.customerId || t.custId || t.customer) === c.id)
+          .reduce((sum, t) => sum + pointsFor(t.amount), 0);
+        const used = reds
+          .filter(r => r.customerId === c.id)
+          .reduce((sum, r) => sum + (r.points || 0), 0);
+        const base = Number.isFinite(c.startingPoints) ? c.startingPoints : 0;
+        c.points = Math.max(0, base + earned - used);
+      });
+
+      saveCustomers(list);
+      renderTable();
+      toast('Points recalculated');
+    });
+
+    /* ---------- Row actions ---------- */
     document.getElementById('cust-rows').addEventListener('click', function (e) {
-      const editId = e.target.getAttribute('data-edit');
-      const delId = e.target.getAttribute('data-del');
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      const editId = btn.getAttribute('data-edit');
+      const delId = btn.getAttribute('data-del');
+      const redeemId = btn.getAttribute('data-redeem');
+
+      if (redeemId) return redeem(redeemId);
+
       const list = loadCustomers();
 
       if (editId) {
         const c = list.find(x => x.id === editId);
         if (!c) return;
+        const parts = (c.name || '').split(',');
         document.getElementById('cust-id').value = c.id;
-        document.getElementById('cust-name').value = c.name;
+        document.getElementById('cust-first').value = c.firstName || (parts[1] || '').trim();
+        document.getElementById('cust-last').value  = c.lastName  || (parts[0] || '').trim();
         document.getElementById('cust-phone').value = c.phone || '';
         document.getElementById('cust-email').value = c.email || '';
         document.getElementById('cust-points').value = c.points || 0;
-        document.getElementById('form-title').textContent = 'Edit Customer';
-        document.getElementById('save-btn').textContent = 'Save Changes';
+        clearErrors();
+        document.getElementById('form-title').textContent = 'Edit customer';
+        document.getElementById('save-btn').textContent = 'Save changes';
         cancelBtn.style.display = 'inline-block';
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }
 
       if (delId) {
-        if (!confirm('Delete this customer? This cannot be undone.')) return;
+        const c = list.find(x => x.id === delId);
+        if (!confirm(`Delete ${c ? displayName(c) : 'this customer'}? This cannot be undone.`)) return;
         saveCustomers(list.filter(x => x.id !== delId));
         renderTable();
         toast('Customer deleted');
       }
     });
+
+    document.getElementById('customer-search').addEventListener('input', renderTable);
+    document.getElementById('status-filter').addEventListener('change', renderTable);
+    renderTable();
   </script>
 </body>
 </html>

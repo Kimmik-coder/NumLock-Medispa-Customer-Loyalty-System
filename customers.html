@@ -26,6 +26,16 @@
   .btn.gold { border-color: #c79a2e; color: #8a6a10; }
   .btn.gold:hover { background: #fdf6e3; }
 
+  /* The voucher action button's label changes with status ("Redeem",
+     "Approve voucher", "Mark received"). Give it one fixed width so
+     View/Edit/Delete always line up in the same column across rows,
+     whatever the label's length. */
+  .row-actions .voucher-action {
+    display: inline-block;
+    width: 150px;
+    text-align: center;
+  }
+
   /* Reserve this button's grid cell even while "hidden" so the auto-fit
      .form-grid doesn't collapse/re-flow its columns and shove the teal
      Save/Add button sideways when Cancel appears or disappears. */
@@ -115,7 +125,7 @@
       </div>
       <div class="card" id="admin-customer-note" style="display:none;">
         <h2 style="margin-bottom:4px;">Customer records</h2>
-        <div class="card-subtitle" style="margin:0;">Adding and editing customer records is handled by staff. Your role here is approving loyalty vouchers below.</div>
+        <div class="card-subtitle" style="margin:0;">Adding and editing customer records is handled by staff. You can request, approve, and confirm loyalty vouchers below.</div>
       </div>
 
       <div class="card">
@@ -141,7 +151,7 @@
 
         <div class="table-wrap"><table>
           <thead>
-            <tr><th>Name</th><th>Phone</th><th>Email</th><th>Points</th><th>Status</th><th>Joined</th><th></th></tr>
+            <tr><th>Name</th><th>Phone</th><th>Email</th><th>Points</th><th>Status</th><th>Voucher</th><th>Joined</th><th></th></tr>
           </thead>
           <tbody id="cust-rows"></tbody>
         </table></div>
@@ -167,13 +177,25 @@
     </div>
   </div>
 
+  <!-- Customer profile modal -->
+  <div class="modal-backdrop" id="profile-modal" role="dialog" aria-modal="true" aria-labelledby="profile-title">
+    <div class="modal" style="max-width:560px; max-height:85vh; overflow-y:auto;">
+      <h2 id="profile-title" style="margin-top:0;">Customer profile</h2>
+      <div id="profile-body"></div>
+      <div class="modal-actions">
+        <button class="btn solid" type="button" id="profile-close">Close</button>
+      </div>
+    </div>
+  </div>
+
   <script src="js/app.js"></script>
   <script>
     const session = requireAuth();
     renderShell('customers.html', 'Customers');
 
-    // Admin's job on this page is only to approve loyalty vouchers.
-    // Adding/editing/deleting customer records is staff's job.
+    // Both admin and staff can request, approve, and mark loyalty vouchers
+    // as received on this page. Only adding/editing/deleting customer
+    // records is restricted to staff.
     const isAdmin = !!session && session.role === 'admin';
     if (isAdmin) {
       document.getElementById('add-customer-card').style.display = 'none';
@@ -230,6 +252,34 @@
       return c.name || '-';
     }
 
+    /* ---------- Redemption status helpers ----------
+       A redemption moves through: pending -> approved -> received.
+       Older records (created before this workflow existed) have no
+       `status` field but already have a `code`, meaning they were
+       already approved; `received` tells us if they went further. */
+    function redemptionStatus(r) {
+      if (r.status) return r.status;
+      return r.received ? 'received' : 'approved';
+    }
+
+    function redemptionDate(r) {
+      const st = redemptionStatus(r);
+      if (st === 'received') return r.receivedDate || r.approvedDate || r.date || r.requestedDate || '';
+      if (st === 'approved') return r.approvedDate || r.date || r.requestedDate || '';
+      return r.requestedDate || r.date || '';
+    }
+
+    function markReceived(redemptionId) {
+      const reds = loadRedemptions();
+      const r = reds.find(x => x.id === redemptionId);
+      if (!r) return false;
+      r.status = 'received';
+      r.received = true;
+      r.receivedDate = new Date().toISOString().slice(0, 10);
+      saveRedemptions(reds);
+      return true;
+    }
+
     /* ---------- Validation ---------- */
     function setError(fieldId, msg) {
       const f = document.getElementById(fieldId);
@@ -282,6 +332,18 @@
       const query = (document.getElementById('customer-search').value || '').toLowerCase().trim();
       const filter = document.getElementById('status-filter').value;
 
+      // Group redemptions by customer once per render instead of scanning
+      // storage per row.
+      const redsByCustomer = {};
+      loadRedemptions().forEach(r => {
+        (redsByCustomer[r.customerId] = redsByCustomer[r.customerId] || []).push(r);
+      });
+      function latestRedemptionFor(id) {
+        const arr = redsByCustomer[id];
+        if (!arr || !arr.length) return null;
+        return arr.slice().sort((a, b) => redemptionDate(b).localeCompare(redemptionDate(a)))[0];
+      }
+
       const filtered = list.filter(c => {
         const hay = `${displayName(c)} ${c.phone || ''} ${c.email || ''}`.toLowerCase();
         const ready = (c.points || 0) >= settings.redeemThreshold;
@@ -295,12 +357,40 @@
       document.getElementById('cust-rows').innerHTML = filtered.map(c => {
         const pts = c.points || 0;
         const ready = pts >= settings.redeemThreshold;
+        const latest = latestRedemptionFor(c.id);
+        const latestStatus = latest ? redemptionStatus(latest) : null;
 
-        // Only admin can declare/approve a voucher. Staff just see the
-        // "Loyalty Ready" badge above and wait for admin to approve it.
-        const redeemBtn = isAdmin
-          ? `<button class="btn gold" ${ready ? `data-redeem="${esc(c.id)}"` : `disabled tabindex="-1" aria-hidden="true" style="visibility:hidden"`}>Approve voucher</button>`
-          : (ready ? `<button class="btn gold" disabled title="Only an admin can approve a voucher.">Admin only</button>` : '');
+        // Voucher status badge — visible to both admin and staff.
+        let voucherCell;
+        if (!latest) {
+          voucherCell = '<span style="color:var(--text-muted);font-size:12px;">—</span>';
+        } else if (latestStatus === 'pending') {
+          voucherCell = '<span class="badge gold">Pending approval</span>';
+        } else if (latestStatus === 'approved') {
+          voucherCell = '<span class="badge gold">Awaiting pickup</span>';
+        } else {
+          voucherCell = `<span class="badge member">Received \u00B7 ${formatDate(latest.receivedDate)}</span>`;
+        }
+
+        // Voucher action — same for admin and staff. Which action shows
+        // depends on where the latest redemption is in its lifecycle.
+        // Always render a same-sized button for this slot (visible or
+        // invisibly reserved via .slot-hidden) so the View/Edit/Delete
+        // buttons after it never shift left/right between rows.
+        let actionBtn;
+        if (latestStatus === 'pending') {
+          actionBtn = `<button class="btn gold voucher-action" data-approve="${esc(latest.id)}">Approve voucher</button>`;
+        } else if (latestStatus === 'approved') {
+          actionBtn = `<button class="btn gold voucher-action" data-mark-received="${esc(latest.id)}">Mark received</button>`;
+        } else if (ready) {
+          actionBtn = `<button class="btn gold voucher-action" data-request-redeem="${esc(c.id)}">Redeem</button>`;
+        } else {
+          actionBtn = `<button class="btn gold voucher-action slot-hidden" disabled tabindex="-1" aria-hidden="true">Redeem</button>`;
+        }
+
+        // Anyone can open the read-only profile (info + full purchase and
+        // redemption history) for a customer.
+        const viewBtn = `<button class="btn" data-view="${esc(c.id)}">View</button>`;
 
         // Only staff manage the actual customer records (add/edit/delete).
         const editDelBtns = isAdmin ? '' : `
@@ -316,8 +406,9 @@
           <td>${ready
               ? '<span class="badge gold">Loyalty Ready</span>'
               : '<span class="badge member">Member</span>'}</td>
+          <td>${voucherCell}</td>
           <td>${formatDate(c.joined)}</td>
-          <td class="row-actions">${redeemBtn}${editDelBtns}</td>
+          <td class="row-actions">${actionBtn}${viewBtn}${editDelBtns}</td>
         </tr>`;
       }).join('');
     }
@@ -381,6 +472,86 @@
     }
     cancelBtn.addEventListener('click', resetForm);
 
+    /* ---------- Customer profile (info + full history) ---------- */
+    const profileModal = document.getElementById('profile-modal');
+
+    function openProfile(id) {
+      const c = loadCustomers().find(x => x.id === id);
+      if (!c) return;
+
+      const ready = (c.points || 0) >= settings.redeemThreshold;
+      const tx = readDB(TX_KEY, [])
+        .filter(t => (t.customerId || t.custId || t.customer) === c.id)
+        .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      const reds = loadRedemptions()
+        .filter(r => r.customerId === c.id)
+        .sort((a, b) => redemptionDate(b).localeCompare(redemptionDate(a)));
+
+      const txRows = tx.length
+        ? tx.map(t => `<tr><td>${formatDate(t.date)}</td><td>${settings.currency}${money(t.amount)}</td><td>+${t.pointsEarned || 0} pts</td></tr>`).join('')
+        : `<tr><td colspan="3" style="color:var(--text-muted);">No purchases recorded yet.</td></tr>`;
+
+      const redRows = reds.length
+        ? reds.map(r => {
+            const st = redemptionStatus(r);
+            const statusBadge = st === 'pending'
+              ? '<span class="badge gold">Pending approval</span>'
+              : st === 'approved'
+                ? '<span class="badge gold">Awaiting pickup</span>'
+                : `<span class="badge member">Received \u00B7 ${formatDate(r.receivedDate)}</span>`;
+            // Both admin and staff can mark an approved voucher as
+            // received. A pending voucher has no code yet, so there's
+            // nothing to mark received until it's approved.
+            const actionBtn = st === 'approved'
+              ? `<button class="btn" data-mark-received="${esc(r.id)}">Mark as received</button>`
+              : '';
+            return `<tr>
+              <td>${formatDate(redemptionDate(r))}</td>
+              <td>${r.code ? esc(r.code) : '<span style="color:var(--text-muted);">—</span>'}</td>
+              <td>-${r.points || 0} pts</td>
+              <td>${statusBadge}</td>
+              <td>${actionBtn}</td>
+            </tr>`;
+          }).join('')
+        : `<tr><td colspan="5" style="color:var(--text-muted);">No rewards redeemed yet.</td></tr>`;
+
+      document.getElementById('profile-title').textContent = displayName(c);
+      document.getElementById('profile-body').innerHTML = `
+        <div class="summary-strip" style="grid-template-columns:repeat(3,1fr); margin-bottom:16px;">
+          <div class="mini-stat"><span>Points balance</span><strong>${c.points || 0}</strong></div>
+          <div class="mini-stat"><span>Status</span><strong>${ready
+              ? '<span class="badge gold">Loyalty Ready</span>'
+              : '<span class="badge member">Member</span>'}</strong></div>
+          <div class="mini-stat"><span>Customer since</span><strong style="font-size:14px;">${formatDate(c.joined)}</strong></div>
+        </div>
+        <p style="font-size:13px; color:var(--text-muted); margin:0 0 16px;">
+          ${esc(c.phone || 'No phone on file')} \u00B7 ${esc(c.email || 'No email on file')}
+        </p>
+        <h3 style="margin:0 0 8px; font-size:14px;">Purchase history</h3>
+        <div class="table-wrap" style="margin-bottom:18px;"><table>
+          <thead><tr><th>Date</th><th>Amount</th><th>Points earned</th></tr></thead>
+          <tbody>${txRows}</tbody>
+        </table></div>
+        <h3 style="margin:0 0 8px; font-size:14px;">Redemption history</h3>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Date</th><th>Voucher code</th><th>Points used</th><th>Status</th><th></th></tr></thead>
+          <tbody>${redRows}</tbody>
+        </table></div>
+      `;
+      profileModal.dataset.customerId = id;
+      profileModal.classList.add('open');
+    }
+    document.getElementById('profile-close').addEventListener('click', () => profileModal.classList.remove('open'));
+    profileModal.addEventListener('click', e => {
+      if (e.target === profileModal) { profileModal.classList.remove('open'); return; }
+      const markId = e.target.closest('button')?.getAttribute('data-mark-received');
+      if (!markId) return;
+      if (markReceived(markId)) {
+        toast('Voucher marked as received');
+        openProfile(profileModal.dataset.customerId);
+      }
+    });
+
     /* ---------- Redeem + voucher ---------- */
     const modal = document.getElementById('voucher-modal');
 
@@ -395,7 +566,12 @@
     document.getElementById('voucher-close').addEventListener('click', () => modal.classList.remove('open'));
     document.getElementById('voucher-print').addEventListener('click', () => window.print());
     modal.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('open'); });
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') modal.classList.remove('open'); });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        modal.classList.remove('open');
+        profileModal.classList.remove('open');
+      }
+    });
 
     function makeCode() {
       const d = new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -403,31 +579,68 @@
       return `MS-${d}-${r}`;
     }
 
-    async function redeem(id) {
-      if (!isAdmin) { toast('Only an admin can approve a voucher.', 'warning'); return; }
+    // Step 1: staff or admin requests a redemption. This just records
+    // intent — no points are deducted and no code exists yet, so it can
+    // be approved (or simply never approved) without any cleanup needed.
+    async function requestRedeem(custId) {
       const list = loadCustomers();
-      const c = list.find(x => x.id === id);
+      const c = list.find(x => x.id === custId);
       if (!c) return;
       const cost = settings.redeemThreshold;
       if ((c.points || 0) < cost) { toast('Not enough points to redeem', 'error'); return; }
-      const ok = await confirmDialog(`Redeem a reward for ${displayName(c)}? This uses ${cost} points.`, { title: 'Redeem reward', confirmText: 'Redeem' });
+      const ok = await confirmDialog(
+        `Request a reward redemption for ${displayName(c)}? This uses ${cost} points once approved.`,
+        { title: 'Request redemption', confirmText: 'Request' }
+      );
       if (!ok) return;
 
-      c.points = (c.points || 0) - cost;
-      const code = makeCode();
       const reds = loadRedemptions();
       reds.push({
         id: cryptoId(),
         customerId: c.id,
         customerName: displayName(c),
-        code,
         points: cost,
-        date: new Date().toISOString().slice(0, 10)
+        status: 'pending',
+        code: null,
+        requestedDate: new Date().toISOString().slice(0, 10),
+        approvedDate: null,
+        receivedDate: null,
+        received: false
       });
+      saveRedemptions(reds);
+      renderTable();
+      toast('Redemption requested \u2014 awaiting approval');
+    }
+
+    // Step 2: staff or admin approves a pending redemption. Points are
+    // deducted and the voucher code is generated only at this point.
+    async function approveRedeem(redemptionId) {
+      const reds = loadRedemptions();
+      const r = reds.find(x => x.id === redemptionId);
+      if (!r) return;
+      const list = loadCustomers();
+      const c = list.find(x => x.id === r.customerId);
+      if (!c) { toast('Customer record not found', 'error'); return; }
+      const cost = r.points || settings.redeemThreshold;
+      if ((c.points || 0) < cost) {
+        toast(`${displayName(c)} no longer has enough points for this voucher.`, 'error');
+        return;
+      }
+      const ok = await confirmDialog(
+        `Approve this reward for ${displayName(c)}? This uses ${cost} points.`,
+        { title: 'Approve voucher', confirmText: 'Approve' }
+      );
+      if (!ok) return;
+
+      c.points = (c.points || 0) - cost;
+      const code = makeCode();
+      r.status = 'approved';
+      r.code = code;
+      r.approvedDate = new Date().toISOString().slice(0, 10);
       saveRedemptions(reds);
       saveCustomers(list);
       renderTable();
-      toast('Reward redeemed');
+      toast('Voucher approved');
       openVoucher(c, code, cost);
     }
 
@@ -443,8 +656,11 @@
         const earned = tx
           .filter(t => (t.customerId || t.custId || t.customer) === c.id)
           .reduce((sum, t) => sum + pointsFor(t.amount), 0);
+        // Only redemptions that have actually been approved (points
+        // deducted) count against the balance — a pending request
+        // hasn't touched the customer's points yet.
         const used = reds
-          .filter(r => r.customerId === c.id)
+          .filter(r => r.customerId === c.id && redemptionStatus(r) !== 'pending')
           .reduce((sum, r) => sum + (r.points || 0), 0);
         const base = Number.isFinite(c.startingPoints) ? c.startingPoints : 0;
         c.points = Math.max(0, base + earned - used);
@@ -461,9 +677,21 @@
       if (!btn) return;
       const editId = btn.getAttribute('data-edit');
       const delId = btn.getAttribute('data-del');
-      const redeemId = btn.getAttribute('data-redeem');
+      const viewId = btn.getAttribute('data-view');
+      const requestId = btn.getAttribute('data-request-redeem');
+      const approveId = btn.getAttribute('data-approve');
+      const markId = btn.getAttribute('data-mark-received');
 
-      if (redeemId) return redeem(redeemId);
+      if (viewId) return openProfile(viewId);
+      if (requestId) return requestRedeem(requestId);
+      if (approveId) return approveRedeem(approveId);
+      if (markId) {
+        if (markReceived(markId)) {
+          renderTable();
+          toast('Voucher marked as received');
+        }
+        return;
+      }
 
       if ((editId || delId) && isAdmin) {
         toast('Admins don\u2019t manage customer records \u2014 that\u2019s handled by staff.', 'warning');

@@ -26,6 +26,11 @@
   .btn.gold { border-color: #c79a2e; color: #8a6a10; }
   .btn.gold:hover { background: #fdf6e3; }
 
+  /* Reserve this button's grid cell even while "hidden" so the auto-fit
+     .form-grid doesn't collapse/re-flow its columns and shove the teal
+     Save/Add button sideways when Cancel appears or disappears. */
+  .btn.slot-hidden { visibility: hidden; pointer-events: none; }
+
   .panel-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
   /* Voucher modal */
@@ -63,6 +68,8 @@
   @media print {
     .sidebar, .topbar, .modal-actions { display: none !important; }
     .modal-backdrop { position: static; background: none; }
+    /* Only the voucher should print — hide the form/table behind it. */
+    .main { display: none !important; }
   }
 </style>
 </head>
@@ -72,7 +79,7 @@
     <div class="main">
       <div class="topbar" id="topbar-slot"></div>
 
-      <div class="card">
+      <div class="card" id="add-customer-card">
         <h2 id="form-title">Add customer</h2>
         <form id="customer-form" class="form-grid" novalidate>
           <input type="hidden" id="cust-id">
@@ -103,8 +110,12 @@
             <div class="err" id="e-points"></div>
           </div>
           <button class="btn solid" type="submit" id="save-btn">Add customer</button>
-          <button class="btn" type="button" id="cancel-edit" style="display:none;">Cancel</button>
+          <button class="btn slot-hidden" type="button" id="cancel-edit">Cancel</button>
         </form>
+      </div>
+      <div class="card" id="admin-customer-note" style="display:none;">
+        <h2 style="margin-bottom:4px;">Customer records</h2>
+        <div class="card-subtitle" style="margin:0;">Adding and editing customer records is handled by staff. Your role here is approving loyalty vouchers below.</div>
       </div>
 
       <div class="card">
@@ -158,8 +169,16 @@
 
   <script src="js/app.js"></script>
   <script>
-    requireAuth();
+    const session = requireAuth();
     renderShell('customers.html', 'Customers');
+
+    // Admin's job on this page is only to approve loyalty vouchers.
+    // Adding/editing/deleting customer records is staff's job.
+    const isAdmin = !!session && session.role === 'admin';
+    if (isAdmin) {
+      document.getElementById('add-customer-card').style.display = 'none';
+      document.getElementById('admin-customer-note').style.display = '';
+    }
 
     /* ---------- Settings & keys ---------- */
     const settings = Object.assign(
@@ -276,6 +295,18 @@
       document.getElementById('cust-rows').innerHTML = filtered.map(c => {
         const pts = c.points || 0;
         const ready = pts >= settings.redeemThreshold;
+
+        // Only admin can declare/approve a voucher. Staff just see the
+        // "Loyalty Ready" badge above and wait for admin to approve it.
+        const redeemBtn = isAdmin
+          ? `<button class="btn gold" ${ready ? `data-redeem="${esc(c.id)}"` : `disabled tabindex="-1" aria-hidden="true" style="visibility:hidden"`}>Approve voucher</button>`
+          : (ready ? `<button class="btn gold" disabled title="Only an admin can approve a voucher.">Admin only</button>` : '');
+
+        // Only staff manage the actual customer records (add/edit/delete).
+        const editDelBtns = isAdmin ? '' : `
+            <button class="btn" data-edit="${esc(c.id)}">Edit</button>
+            <button class="btn danger" data-del="${esc(c.id)}">Delete</button>`;
+
         return `
         <tr>
           <td>${esc(displayName(c))}</td>
@@ -286,11 +317,7 @@
               ? '<span class="badge gold">Loyalty Ready</span>'
               : '<span class="badge member">Member</span>'}</td>
           <td>${formatDate(c.joined)}</td>
-          <td class="row-actions">
-            ${ready ? `<button class="btn gold" data-redeem="${esc(c.id)}">Redeem</button>` : ''}
-            <button class="btn" data-edit="${esc(c.id)}">Edit</button>
-            <button class="btn danger" data-del="${esc(c.id)}">Delete</button>
-          </td>
+          <td class="row-actions">${redeemBtn}${editDelBtns}</td>
         </tr>`;
       }).join('');
     }
@@ -350,7 +377,7 @@
       document.getElementById('cust-points').value = 0;
       document.getElementById('form-title').textContent = 'Add customer';
       document.getElementById('save-btn').textContent = 'Add customer';
-      cancelBtn.style.display = 'none';
+      cancelBtn.classList.add('slot-hidden');
     }
     cancelBtn.addEventListener('click', resetForm);
 
@@ -376,13 +403,15 @@
       return `MS-${d}-${r}`;
     }
 
-    function redeem(id) {
+    async function redeem(id) {
+      if (!isAdmin) { toast('Only an admin can approve a voucher.', 'warning'); return; }
       const list = loadCustomers();
       const c = list.find(x => x.id === id);
       if (!c) return;
       const cost = settings.redeemThreshold;
-      if ((c.points || 0) < cost) { toast('Not enough points to redeem'); return; }
-      if (!confirm(`Redeem a reward for ${displayName(c)}? This uses ${cost} points.`)) return;
+      if ((c.points || 0) < cost) { toast('Not enough points to redeem', 'error'); return; }
+      const ok = await confirmDialog(`Redeem a reward for ${displayName(c)}? This uses ${cost} points.`, { title: 'Redeem reward', confirmText: 'Redeem' });
+      if (!ok) return;
 
       c.points = (c.points || 0) - cost;
       const code = makeCode();
@@ -403,8 +432,9 @@
     }
 
     /* ---------- Recalculate points from transactions ---------- */
-    document.getElementById('recalc-btn').addEventListener('click', function () {
-      if (!confirm('Recompute every customer\u2019s points from their transactions and redemptions?')) return;
+    document.getElementById('recalc-btn').addEventListener('click', async function () {
+      const ok = await confirmDialog('Recompute every customer\u2019s points from their transactions and redemptions?', { title: 'Recalculate points', confirmText: 'Recalculate' });
+      if (!ok) return;
       const list = loadCustomers();
       const tx = readDB(TX_KEY, []);
       const reds = loadRedemptions();
@@ -426,7 +456,7 @@
     });
 
     /* ---------- Row actions ---------- */
-    document.getElementById('cust-rows').addEventListener('click', function (e) {
+    document.getElementById('cust-rows').addEventListener('click', async function (e) {
       const btn = e.target.closest('button');
       if (!btn) return;
       const editId = btn.getAttribute('data-edit');
@@ -434,6 +464,11 @@
       const redeemId = btn.getAttribute('data-redeem');
 
       if (redeemId) return redeem(redeemId);
+
+      if ((editId || delId) && isAdmin) {
+        toast('Admins don\u2019t manage customer records \u2014 that\u2019s handled by staff.', 'warning');
+        return;
+      }
 
       const list = loadCustomers();
 
@@ -450,13 +485,14 @@
         clearErrors();
         document.getElementById('form-title').textContent = 'Edit customer';
         document.getElementById('save-btn').textContent = 'Save changes';
-        cancelBtn.style.display = 'inline-block';
+        cancelBtn.classList.remove('slot-hidden');
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }
 
       if (delId) {
         const c = list.find(x => x.id === delId);
-        if (!confirm(`Delete ${c ? displayName(c) : 'this customer'}? This cannot be undone.`)) return;
+        const ok = await confirmDialog(`Delete ${c ? displayName(c) : 'this customer'}? This cannot be undone.`, { title: 'Delete customer', confirmText: 'Delete', danger: true });
+        if (!ok) return;
         saveCustomers(list.filter(x => x.id !== delId));
         renderTable();
         toast('Customer deleted');

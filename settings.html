@@ -118,7 +118,7 @@
 
   <script src="js/app.js"></script>
   <script>
-    const session = requireAuth();
+    const session = requireRole(['admin']);
     renderShell('settings.html', 'Settings');
 
     const RED_KEY = DB_KEYS.redemptions || 'medispa_redemptions';
@@ -266,8 +266,9 @@
     });
 
     /* ---------- Reset demo data ---------- */
-    document.getElementById('reset-btn').addEventListener('click', function () {
-      if (!confirm('This will erase all customers, transactions, redemptions, and settings in this browser. Continue?')) return;
+    document.getElementById('reset-btn').addEventListener('click', async function () {
+      const ok = await confirmDialog('This will erase all customers, transactions, redemptions, and settings in this browser. Continue?', { title: 'Reset demo data', confirmText: 'Reset', danger: true });
+      if (!ok) return;
       Object.values(DB_KEYS).forEach(k => { if (k !== DB_KEYS.session) localStorage.removeItem(k); });
       localStorage.removeItem(RED_KEY);
       seedIfEmpty();

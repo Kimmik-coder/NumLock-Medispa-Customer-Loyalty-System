@@ -28,10 +28,16 @@ All major screens are connected through the shared sidebar navigation. The layou
 
 No backend, database, npm install, or build process is required.
 
-## Demo account
+## Demo accounts & roles
 
-**Username:** `admin`  
-**Password:** `admin123`
+Two roles are supported, both stored in `js/app.js`'s seed data:
+
+| Role | Username | Password | Access |
+|---|---|---|---|
+| Admin | `admin` | `admin123` | All pages: Dashboard, Customer, Transaction, Report, Settings |
+| Staff | `staff` | `staff123` | Dashboard, Customer, Transaction only — no Report or Settings |
+
+Role is assigned per user in the seed data (`DB_KEYS.users`) and stored on the login session. The sidebar hides links a role can't use, and the Report/Settings pages themselves also check the role on load (via `requireRole(['admin'])` in `js/app.js`), so a staff account can't get in even by typing the URL directly.
 
 ## Run
 

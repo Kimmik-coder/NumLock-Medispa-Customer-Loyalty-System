@@ -16,7 +16,7 @@
   .num { text-align: right; font-variant-numeric: tabular-nums; }
 
   .chart-wrap { padding: 6px 4px 0; }
-  .chart-wrap svg { width: 100%; height: auto; display: block; }
+  .chart-wrap svg { width: 100%; max-width: 820px; height: auto; display: block; margin: 0 auto; }
   .chart-empty { padding: 30px 0; text-align: center; color: var(--text-muted, #667); font-size: 13px; }
 
   .kpi-sub { font-size: 12px; color: var(--text-muted, #667); margin-top: 2px; }
@@ -95,7 +95,7 @@
 
   <script src="js/app.js"></script>
   <script>
-    requireAuth();
+    requireRole(['admin']);
     renderShell('report.html', 'Report');
 
     const raw = readDB(DB_KEYS.settings, {});
@@ -208,8 +208,12 @@
 
       const W = 700, H = 220, padL = 56, padB = 28, padT = 10, padR = 10;
       const plotW = W - padL - padR, plotH = H - padT - padB;
-      const barGap = 6;
-      const barW = Math.max(6, plotW / days.length - barGap);
+      const barGap = 10;
+      const maxBarW = 56; // cap so bars stay proportionate when there are only a few days
+      const barW = Math.min(maxBarW, Math.max(6, plotW / days.length - barGap));
+      // Center the bar group instead of stretching it across the full plot width
+      const groupW = days.length * barW + (days.length - 1) * barGap;
+      const startX = padL + Math.max(0, (plotW - groupW) / 2);
 
       const yTicks = 4;
       let gridSvg = '';
@@ -223,7 +227,7 @@
       let barsSvg = '';
       days.forEach((d, i) => {
         const val = byDay[d];
-        const x = padL + i * (barW + barGap);
+        const x = startX + i * (barW + barGap);
         const barH = (val / max) * plotH;
         const y = padT + plotH - barH;
         const showLabel = days.length <= 10 || i % Math.ceil(days.length / 10) === 0;

@@ -34,7 +34,8 @@ function writeDB(key, value) {
 function seedIfEmpty() {
   if (!localStorage.getItem(DB_KEYS.users)) {
     writeDB(DB_KEYS.users, [
-      { username: 'admin', password: 'admin123' }
+      { username: 'admin', password: 'admin123', role: 'admin' },
+      { username: 'staff', password: 'staff123', role: 'staff' }
     ]);
   }
   if (!localStorage.getItem(DB_KEYS.settings)) {
@@ -116,6 +117,22 @@ function requireAuth() {
   return s;
 }
 
+// Use on pages that only some roles may open (e.g. Settings, Report are
+// admin-only). allowedRoles is an array like ['admin']. Staff who try to
+// open the page directly (typed URL, bookmark, etc.) get bounced back to
+// the dashboard with an explanatory toast.
+function requireRole(allowedRoles) {
+  const s = requireAuth();
+  if (!s) return null;
+  const role = s.role || 'admin';
+  if (allowedRoles && !allowedRoles.includes(role)) {
+    sessionStorage.setItem('medispa_flash', "Your staff account doesn't have access to that page.");
+    window.location.href = 'dashboard.html';
+    return null;
+  }
+  return s;
+}
+
 function login(username, password) {
   const users = readDB(DB_KEYS.users, []);
   // Simple JD if-else check, per the tech-stack brief.
@@ -123,6 +140,7 @@ function login(username, password) {
     if (users[i].username === username && users[i].password === password) {
       writeDB(DB_KEYS.session, {
         username: username,
+        role: users[i].role || 'admin',
         loggedIn: true,
         lastActive: Date.now()
       });
@@ -144,27 +162,100 @@ function money(n) {
 function initials(name) {
   return (name || '?').trim().charAt(0).toUpperCase();
 }
-function toast(msg) {
-  let el = document.getElementById('toast');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'toast';
-    el.className = 'toast';
-    document.body.appendChild(el);
+/* ---------- Notification box (toast) ----------
+   Replaces the browser's default alert()-style popup with an in-app
+   notification box, stacked so several actions can each get their own
+   message instead of overwriting one another.
+   type: 'success' (default) | 'error' | 'warning' | 'info' */
+const TOAST_ICONS = { success: '✓', error: '!', warning: '!', info: 'i' };
+function toast(msg, type) {
+  type = type && TOAST_ICONS[type] ? type : 'success';
+  let stack = document.getElementById('toast-stack');
+  if (!stack) {
+    stack = document.createElement('div');
+    stack.id = 'toast-stack';
+    stack.className = 'toast-stack';
+    document.body.appendChild(stack);
   }
-  el.textContent = msg;
-  el.classList.add('show');
-  clearTimeout(el._t);
-  el._t = setTimeout(() => el.classList.remove('show'), 2200);
+  const el = document.createElement('div');
+  el.className = `toast-item ${type}`;
+  el.innerHTML = `
+    <span class="toast-icon">${TOAST_ICONS[type]}</span>
+    <span class="toast-msg"></span>
+    <button type="button" class="toast-close" aria-label="Dismiss">&times;</button>
+  `;
+  el.querySelector('.toast-msg').textContent = msg;
+
+  const remove = () => {
+    el.classList.remove('show');
+    setTimeout(() => el.remove(), 220);
+  };
+  el.querySelector('.toast-close').addEventListener('click', remove);
+
+  stack.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  el._t = setTimeout(remove, 3200);
+}
+
+/* ---------- Confirm dialog (replaces native confirm()) ----------
+   Returns a Promise<boolean> so callers can `await confirmDialog(...)`.
+   Renders an in-app dialog instead of the browser's own "<site> says"
+   popup. Usage:
+     if (!(await confirmDialog('Delete this customer?'))) return;
+   Options: { title, confirmText, cancelText, danger } */
+function confirmDialog(message, opts) {
+  opts = opts || {};
+  return new Promise(resolve => {
+    let backdrop = document.getElementById('confirm-backdrop');
+    if (backdrop) backdrop.remove(); // avoid stacking if one is already open
+    backdrop = document.createElement('div');
+    backdrop.id = 'confirm-backdrop';
+    backdrop.className = 'confirm-backdrop';
+    backdrop.setAttribute('role', 'dialog');
+    backdrop.setAttribute('aria-modal', 'true');
+    backdrop.innerHTML = `
+      <div class="confirm-card">
+        <h2></h2>
+        <p></p>
+        <div class="confirm-actions">
+          <button type="button" class="btn" id="confirm-cancel"></button>
+          <button type="button" class="btn ${opts.danger ? 'danger' : 'solid'}" id="confirm-ok"></button>
+        </div>
+      </div>
+    `;
+    backdrop.querySelector('h2').textContent = opts.title || 'Please confirm';
+    backdrop.querySelector('p').textContent = message;
+    backdrop.querySelector('#confirm-cancel').textContent = opts.cancelText || 'Cancel';
+    backdrop.querySelector('#confirm-ok').textContent = opts.confirmText || 'Confirm';
+    document.body.appendChild(backdrop);
+    requestAnimationFrame(() => backdrop.classList.add('open'));
+
+    const cleanup = (result) => {
+      document.removeEventListener('keydown', onKey);
+      backdrop.classList.remove('open');
+      setTimeout(() => backdrop.remove(), 150);
+      resolve(result);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') cleanup(false);
+      if (e.key === 'Enter') cleanup(true);
+    };
+    document.addEventListener('keydown', onKey);
+    backdrop.querySelector('#confirm-ok').addEventListener('click', () => cleanup(true));
+    backdrop.querySelector('#confirm-cancel').addEventListener('click', () => cleanup(false));
+    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) cleanup(false); });
+  });
 }
 
 /* ---------- shared shell (sidebar + topbar) ---------- */
+// `roles` limits which logged-in roles see this nav item / may open the page.
+// Omit `roles` (or leave it out) for pages every role can use.
 const NAV_ITEMS = [
   { href: 'dashboard.html', icon: 'assets/icons/home.png', label: 'Home' },
   { href: 'customers.html', icon: 'assets/icons/customers.png', label: 'Customer' },
   { href: 'transactions.html', icon: 'assets/icons/transactions.png', label: 'Transaction' },
-  { href: 'report.html', icon: 'assets/icons/report.png', label: 'Report' },
-  { href: 'settings.html', icon: 'assets/icons/settings.png', label: 'Setting' }
+  { href: 'report.html', icon: 'assets/icons/report.png', label: 'Report', roles: ['admin'] },
+  { href: 'settings.html', icon: 'assets/icons/settings.png', label: 'Setting', roles: ['admin'] }
 ];
 
 function renderShell(activeHref, pageTitle) {
@@ -177,8 +268,11 @@ function renderShell(activeHref, pageTitle) {
 
   const settings = readDB(DB_KEYS.settings, { storeName: 'MediSpa' });
   const session = getSession();
+  const role = session ? (session.role || 'admin') : 'admin';
 
-  const nav = NAV_ITEMS.map(item => `
+  const nav = NAV_ITEMS
+    .filter(item => !item.roles || item.roles.includes(role))
+    .map(item => `
     <a class="nav-item ${item.href === activeHref ? 'active' : ''}" href="${item.href}">
       <span class="ico"><img src="${item.icon}" alt=""></span><span>${escapeHTML(item.label)}</span>
     </a>
@@ -206,6 +300,7 @@ function renderShell(activeHref, pageTitle) {
     <div class="user-chip" id="user-chip">
       <div class="avatar admin-avatar"><img src="assets/icons/admin.png" alt="Admin"></div>
       <span style="font-size:13px;color:var(--text-muted)">${escapeHTML(session ? session.username : '')}</span>
+      <span class="badge ${role === 'admin' ? 'gold' : 'member'}" style="text-transform:capitalize;">${escapeHTML(role)}</span>
       <span>&#9660;</span>
       <div class="user-menu" id="user-menu">
         <button id="logout-btn">Log out</button>

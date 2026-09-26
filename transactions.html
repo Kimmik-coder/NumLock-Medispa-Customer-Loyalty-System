@@ -51,6 +51,8 @@
   @media print {
     .sidebar, .topbar, .modal-actions { display: none !important; }
     .modal-backdrop { position: static; background: none; }
+    /* Only the voucher should print — hide the form/table behind it. */
+    .main { display: none !important; }
   }
 </style>
 </head>
@@ -121,8 +123,13 @@
 
   <script src="js/app.js"></script>
   <script>
-    requireAuth();
+    const session = requireAuth();
     renderShell('transactions.html', 'Transactions');
+
+    // Staff record transactions but must not be able to delete them
+    // (a deletable transaction is an easy way to pocket cash and erase
+    // the trail). Only admin can delete.
+    const isAdmin = !!session && session.role === 'admin';
 
     /* ---------- Settings (tanggap ang luma at bagong key names) ---------- */
     const raw = readDB(DB_KEYS.settings, {});
@@ -224,13 +231,18 @@
       document.getElementById('txn-rows').innerHTML = list.map(t => {
         const c = custs.find(x => x.id === t.customerId);
         const name = c ? displayName(c) : (t.customerName || 'Deleted customer');
+        // Only admin can delete a recorded transaction; staff cannot, so
+        // a transaction can't quietly be entered then erased to hide cash.
+        const delCell = isAdmin
+          ? `<button class="btn danger" data-del="${esc(t.id)}">Delete</button>`
+          : `<span style="color:var(--text-muted);font-size:12px;">Admin only</span>`;
         return `
         <tr>
           <td>${formatDate(t.date)}</td>
           <td>${esc(name)}</td>
           <td class="num">${peso(t.amount)}</td>
           <td class="num">${t.pointsEarned || 0}</td>
-          <td class="row-actions"><button class="btn danger" data-del="${esc(t.id)}">Delete</button></td>
+          <td class="row-actions">${delCell}</td>
         </tr>`;
       }).join('');
     }
@@ -292,16 +304,18 @@
     });
 
     /* ---------- Delete (ibinabalik ang points) ---------- */
-    document.getElementById('txn-rows').addEventListener('click', function (e) {
+    document.getElementById('txn-rows').addEventListener('click', async function (e) {
       const btn = e.target.closest('button');
       if (!btn) return;
       const delId = btn.getAttribute('data-del');
       if (!delId) return;
+      if (!isAdmin) { toast('Only an admin can delete a transaction.', 'warning'); return; }
 
       const txns = loadTxns();
       const t = txns.find(x => x.id === delId);
       if (!t) return;
-      if (!confirm(`Delete this ${peso(t.amount)} transaction? ${t.pointsEarned || 0} points will be taken back.`)) return;
+      const ok = await confirmDialog(`Delete this ${peso(t.amount)} transaction? ${t.pointsEarned || 0} points will be taken back.`, { title: 'Delete transaction', confirmText: 'Delete', danger: true });
+      if (!ok) return;
 
       const custs = loadCustomers();
       const c = custs.find(x => x.id === t.customerId);
@@ -328,14 +342,15 @@
       return 'MS-' + today().replace(/-/g, '') + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
     }
 
-    function offerRedeem(custId) {
+    async function offerRedeem(custId) {
       const custs = loadCustomers();
       const cust = custs.find(c => c.id === custId);
       if (!cust) return;
       const cost = settings.redeemThreshold;
       const msg = `${displayName(cust)} now has ${cust.points} points and qualifies for a reward. ` +
                   `Redeem now? This uses ${cost} points.`;
-      if (!confirm(msg)) return;
+      const ok = await confirmDialog(msg, { title: 'Reward available', confirmText: 'Redeem now' });
+      if (!ok) return;
 
       cust.points = Math.max(0, (cust.points || 0) - cost);
       saveCustomers(custs);

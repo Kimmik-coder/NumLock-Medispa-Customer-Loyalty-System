@@ -14,11 +14,7 @@
 <body>
 <div class="app"><div class="sidebar" id="sidebar-slot"></div><main class="main">
   <div class="topbar" id="topbar-slot"></div>
-  <div class="quick-actions">
-    <a class="btn solid" href="customers.html">+ Add Customer</a>
-    <a class="btn" href="transactions.html">+ Record Transaction</a>
-    <a class="btn" href="report.html">View Report</a>
-  </div>
+  <div class="quick-actions" id="quick-actions"></div>
   <div class="kpi-row">
     <div class="kpi-card"><div class="kpi-label">Total Customers</div><div class="kpi-value" id="kpi-customers">0</div><div class="kpi-sub">Registered customer records</div></div>
     <div class="kpi-card"><div class="kpi-label">Total Revenue</div><div class="kpi-value" id="kpi-revenue">0.00</div><div class="kpi-sub">All recorded transactions</div></div>
@@ -29,9 +25,9 @@
       <div class="panel-head"><h2>Sales Overview</h2><span class="badge member" id="chart-badge">No sales yet</span></div>
       <div class="chart-legend" id="chart-legend" aria-hidden="true">
         <span><i style="background:#31b9b5"></i><span id="legend-sales-label">Sales</span></span>
-        <span><i class="line" style="background:#c9a227"></i>Points earned</span>
+        <span><i class="line" style="background:#c9a227"></i>Massage spend (counts toward reward)</span>
       </div>
-      <canvas id="sales-canvas" role="img" aria-label="Bar and line chart of daily sales and points earned" style="width:100%;height:240px;"></canvas>
+      <canvas id="sales-canvas" role="img" aria-label="Bar and line chart of daily sales and massage spend" style="width:100%;height:240px;"></canvas>
     </section>
     <section class="panel">
       <div class="panel-head"><h2>Recent Customers</h2><a class="btn" href="customers.html">View all</a></div>
@@ -39,19 +35,20 @@
     </section>
   </div>
   <div class="card" style="margin-top:18px;">
-    <div class="panel-head"><div><h2 style="margin-bottom:4px;">Loyalty Program</h2><div class="card-subtitle" style="margin:0;">Quick view of the current points rule and reward threshold.</div></div></div>
+    <div class="panel-head"><div><h2 style="margin-bottom:4px;">Loyalty Program</h2><div class="card-subtitle" style="margin:0;">The current reward rule, from Settings.</div></div></div>
     <div class="summary-strip">
-      <div class="mini-stat"><span>Earn rate</span><strong id="rule-points">10 pts</strong></div>
-      <div class="mini-stat"><span>Per purchase of</span><strong id="rule-unit">100</strong></div>
-      <div class="mini-stat"><span>Reward threshold</span><strong id="rule-threshold">100 pts</strong></div>
+      <div class="mini-stat"><span>Qualifying service</span><strong id="rule-category">Massage</strong></div>
+      <div class="mini-stat"><span>Spend needed</span><strong id="rule-threshold">₱10,000</strong></div>
+      <div class="mini-stat"><span>Reward</span><strong id="rule-prize" style="font-size:15px;">—</strong></div>
     </div>
   </div>
-  <div class="card" style="margin-top:18px;">
+  <div class="card" style="margin-top:18px;" id="voucher-card">
     <div class="panel-head">
       <div>
-        <h2 style="margin-bottom:4px;">Recently Approved Vouchers</h2>
-        <div class="card-subtitle" style="margin:0;">Vouchers an admin has approved. Present the code at the front desk when the customer arrives.</div>
+        <h2 style="margin-bottom:4px;" id="voucher-title">Vouchers</h2>
+        <div class="card-subtitle" style="margin:0;" id="voucher-subtitle"></div>
       </div>
+      <button class="btn" type="button" id="clear-notices" style="display:none;">Mark all as read</button>
     </div>
     <div id="voucher-list"></div>
   </div>
@@ -81,10 +78,7 @@ function fmtName(name) {
 /* ---------- data ---------- */
 const customers = readDB(DB_KEYS.customers, []);
 const transactions = readDB(DB_KEYS.transactions, []);
-const settings = Object.assign(
-  { redeemThreshold: 100, pointsPerAmount: 10, amountUnit: 100, currency: '\u20B1' },
-  readDB(DB_KEYS.settings, {})
-);
+const settings = getSettings();
 const currency = settings.currency || '\u20B1';
 
 /* ---------- KPI cards ---------- */
@@ -93,34 +87,108 @@ const totalRevenue = transactions.reduce((sum, t) => sum + Number(t.amount || 0)
 document.getElementById('kpi-revenue').textContent = currency + money(totalRevenue);
 const loyaltyMembers = customers.filter(c => (c.points || 0) >= settings.redeemThreshold).length;
 document.getElementById('kpi-loyalty').textContent = loyaltyMembers;
-document.getElementById('kpi-loyalty-sub').textContent = `Customers with ${settings.redeemThreshold}+ pts`;
+document.getElementById('kpi-loyalty-sub').textContent = `Customers with ${currency}${settings.redeemThreshold.toLocaleString('en-PH')}+ in ${settings.qualifyingCategory.toLowerCase()}`;
 document.getElementById('legend-sales-label').textContent = `Sales (${currency})`;
 
 /* ---------- Loyalty Program card (always from Settings) ---------- */
-document.getElementById('rule-points').textContent = settings.pointsPerAmount + ' pts';
-document.getElementById('rule-unit').textContent = currency + money(settings.amountUnit);
-document.getElementById('rule-threshold').textContent = settings.redeemThreshold + ' pts';
+document.getElementById('rule-category').textContent = settings.qualifyingCategory;
+document.getElementById('rule-threshold').textContent = currency + settings.redeemThreshold.toLocaleString('en-PH');
+document.getElementById('rule-prize').textContent = settings.prizes.join(' / ');
 
 /* ---------- Recent customers ---------- */
 const recent = [...customers].sort((a, b) => (b.joined || '').localeCompare(a.joined || '')).slice(0, 5);
 document.getElementById('recent-list').innerHTML = recent.length
-  ? recent.map(c => `<div class="recent-item"><span class="avatar">${esc(initials(c.name))}</span><span>${esc(fmtName(c.name))}</span><span class="badge ${(c.points || 0) >= settings.redeemThreshold ? 'gold' : 'member'}" style="margin-left:auto">${c.points || 0} pts</span></div>`).join('')
+  ? recent.map(c => `<div class="recent-item"><span class="avatar">${esc(initials(c.name))}</span><span>${esc(fmtName(c.name))}</span><span class="badge ${(c.points || 0) >= settings.redeemThreshold ? 'gold' : 'member'}" style="margin-left:auto">${currency}${Math.round(c.points || 0).toLocaleString('en-PH')}</span></div>`).join('')
   : '<div class="empty-state">No customers yet. <a href="customers.html">Add your first customer</a>.</div>';
 
-/* ---------- Recently approved vouchers (declared by admin) ---------- */
-const redemptions = readDB(DB_KEYS.redemptions || 'medispa_redemptions', []);
-const recentVouchers = [...redemptions]
-  .sort((a, b) => String(b.date).localeCompare(String(a.date)))
-  .slice(0, 5);
-document.getElementById('voucher-list').innerHTML = recentVouchers.length
-  ? recentVouchers.map(r => `
-      <div class="recent-item">
-        <span class="avatar">${esc(initials(r.customerName))}</span>
-        <span>${esc(fmtName(r.customerName))}</span>
-        <span class="badge gold" style="font-family:monospace;">${esc(r.code || '')}</span>
-        <span class="badge member" style="margin-left:auto">${r.points || 0} pts used</span>
-      </div>`).join('')
-  : '<div class="empty-state">No vouchers approved yet. Ask an admin to approve one from the Customers page.</div>';
+/* ---------- Role-based quick actions ---------- */
+const role = (getSession() || {}).role || 'admin';
+document.getElementById('quick-actions').innerHTML = role === 'admin'
+  ? '<a class="btn solid" href="customers.html">Customers</a><a class="btn" href="report.html">View Report</a>'
+  : '<a class="btn solid" href="customers.html">+ Add Customer</a><a class="btn" href="transactions.html">+ Record Transaction</a>';
+
+/* ---------- Voucher panel ----------
+   ADMIN: vouchers waiting for approval + notifications when staff mark one received.
+   STAFF: approved vouchers to print for the therapist, and requests still waiting on the admin. */
+const fmtDate = iso => iso ? new Date(iso + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+
+function renderVouchers() {
+  const reds = readDB(DB_KEYS.redemptions, []).slice().sort(newestRedemptionFirst);
+  const list = document.getElementById('voucher-list');
+  const title = document.getElementById('voucher-title');
+  const sub = document.getElementById('voucher-subtitle');
+  const clearBtn = document.getElementById('clear-notices');
+  const prizeOf = r => esc(r.prize || settings.prizes[0]);
+
+  if (role === 'admin') {
+    const pending = reds.filter(r => redemptionStatus(r) === 'pending');
+    const received = reds.filter(r => redemptionStatus(r) === 'received' && r.adminSeen !== undefined).slice(0, 8);
+    const unread = received.filter(r => r.adminSeen === false);
+    title.textContent = 'Voucher approvals & notifications';
+    sub.textContent = 'Approve the reward requests from staff. You\'ll see here when a voucher has been handed to the therapist.';
+    clearBtn.style.display = unread.length ? '' : 'none';
+
+    let html = '<h3 style="font-size:13px;margin:0 0 8px;">Waiting for your approval</h3>';
+    html += pending.length ? pending.map(r => `
+      <div class="notice-item">
+        <span class="avatar" style="width:30px;height:30px;border-radius:50%;background:#e7f7f6;display:inline-flex;align-items:center;justify-content:center;font-size:12px;">${esc(initials(r.customerName))}</span>
+        <div class="grow"><strong>${esc(fmtName(r.customerName))}</strong><div class="sub">${prizeOf(r)} \u00B7 requested ${fmtDate(r.requestedDate)}${r.requestedBy ? ' by ' + esc(r.requestedBy) : ''}</div></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;"><button class="btn gold" data-approve="${esc(r.id)}">Approve voucher</button><button class="btn danger" data-reject="${esc(r.id)}">Reject</button></div>
+      </div>`).join('') : '<div class="empty-state" style="padding:14px;">No voucher requests waiting for approval.</div>';
+
+    html += '<h3 style="font-size:13px;margin:16px 0 8px;">Received by therapist</h3>';
+    html += received.length ? received.map(r => `
+      <div class="notice-item ${r.adminSeen === false ? 'unread' : ''}">
+        <span class="avatar" style="width:30px;height:30px;border-radius:50%;background:#e7f7f6;display:inline-flex;align-items:center;justify-content:center;font-size:12px;">${esc(initials(r.customerName))}</span>
+        <div class="grow"><strong>${esc(fmtName(r.customerName))}</strong> \u2014 voucher received${r.adminSeen === false ? ' <span class="badge gold">New</span>' : ''}
+          <div class="sub">${prizeOf(r)} \u00B7 <span class="code-chip">${esc(r.code || '')}</span> \u00B7 ${fmtDate(r.receivedDate)}${r.receivedBy ? ' \u00B7 handed over by ' + esc(r.receivedBy) : ''}</div></div>
+        ${r.adminSeen === false ? `<button class="btn" data-ack="${esc(r.id)}">Mark as read</button>` : ''}
+      </div>`).join('') : '<div class="empty-state" style="padding:14px;">No vouchers received yet.</div>';
+    list.innerHTML = html;
+  } else {
+    const approved = reds.filter(r => redemptionStatus(r) === 'approved');
+    const pending = reds.filter(r => redemptionStatus(r) === 'pending');
+    title.textContent = 'Vouchers for the therapist';
+    sub.textContent = 'Print each approved voucher, give it to the therapist, then mark it as received so the admin is notified.';
+    clearBtn.style.display = 'none';
+
+    let html = '<h3 style="font-size:13px;margin:0 0 8px;">Approved \u2014 ready to print</h3>';
+    html += approved.length ? approved.map(r => `
+      <div class="notice-item unread">
+        <span class="avatar" style="width:30px;height:30px;border-radius:50%;background:#e7f7f6;display:inline-flex;align-items:center;justify-content:center;font-size:12px;">${esc(initials(r.customerName))}</span>
+        <div class="grow"><strong>${esc(fmtName(r.customerName))}</strong><div class="sub">${prizeOf(r)} \u00B7 <span class="code-chip">${esc(r.code || '')}</span> \u00B7 approved ${fmtDate(r.approvedDate)}</div></div>
+        <button class="btn gold" data-print-voucher="${esc(r.id)}">Print / mark received</button>
+      </div>`).join('') : '<div class="empty-state" style="padding:14px;">No approved vouchers waiting to be handed out.</div>';
+
+    html += '<h3 style="font-size:13px;margin:16px 0 8px;">Waiting for admin approval</h3>';
+    html += pending.length ? pending.map(r => `
+      <div class="notice-item">
+        <span class="avatar" style="width:30px;height:30px;border-radius:50%;background:#e7f7f6;display:inline-flex;align-items:center;justify-content:center;font-size:12px;">${esc(initials(r.customerName))}</span>
+        <div class="grow"><strong>${esc(fmtName(r.customerName))}</strong><div class="sub">${prizeOf(r)} \u00B7 requested ${fmtDate(r.requestedDate)}</div></div>
+        <span class="badge gold">Pending</span>
+      </div>`).join('') : '<div class="empty-state" style="padding:14px;">Nothing pending. Request a reward from the Customers page when a customer is Loyalty Ready.</div>';
+    list.innerHTML = html;
+  }
+}
+function refreshAfterVoucherChange() {
+  renderVouchers();
+  // refresh the nav badge
+  const badge = document.querySelector('.nav-item[href="dashboard.html"] .nav-badge');
+  const n = voucherAlertCount();
+  if (badge) { n ? badge.textContent = n : badge.remove(); }
+  else if (n) document.querySelector('.nav-item[href="dashboard.html"]').insertAdjacentHTML('beforeend', `<span class="nav-badge">${n}</span>`);
+  document.getElementById('kpi-loyalty').textContent = readDB(DB_KEYS.customers, []).filter(c => (c.points || 0) >= settings.redeemThreshold).length;
+}
+document.getElementById('voucher-list').addEventListener('click', async e => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  if (btn.dataset.approve) { if (await approveVoucher(btn.dataset.approve)) refreshAfterVoucherChange(); }
+  else if (btn.dataset.reject) { if (await rejectVoucher(btn.dataset.reject)) refreshAfterVoucherChange(); }
+  else if (btn.dataset.ack) { acknowledgeReceived(btn.dataset.ack); refreshAfterVoucherChange(); }
+  else if (btn.dataset.printVoucher) openVoucherModal(btn.dataset.printVoucher, refreshAfterVoucherChange);
+});
+document.getElementById('clear-notices').addEventListener('click', () => { acknowledgeReceived(); refreshAfterVoucherChange(); });
+renderVouchers();
 
 /* ---------- Sales chart ---------- */
 const byDate = {};
@@ -174,7 +242,7 @@ function drawChart() {
     ctx.fillStyle = '#6f7f86'; ctx.textAlign = 'right';
     ctx.fillText(compactPeso((maxS / 4) * i), padL - 8, y + 4);
     ctx.fillStyle = '#a5851c'; ctx.textAlign = 'left';
-    ctx.fillText(String(Math.round((maxP / 4) * i)), w - padR + 8, y + 4);
+    ctx.fillText(compactPeso((maxP / 4) * i), w - padR + 8, y + 4);
   }
 
   // bars + x labels (skip labels when there is no room)

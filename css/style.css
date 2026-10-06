@@ -117,7 +117,8 @@ button { font-family: inherit; cursor: pointer; }
 .btn { padding:9px 14px; border-radius:8px; border:1px solid #cbdada; background:var(--white); color:var(--text-dark); font-size:13px; font-weight:650; }
 .btn.solid { background:var(--accent-teal); border-color:var(--accent-teal); color:var(--white); }
 .btn.solid:hover { background:var(--accent-teal-dark); }
-.btn.gold { background:var(--accent-gold); border-color:var(--accent-gold); color:var(--white); }
+.btn.gold { background:#946f10; border-color:#946f10; color:var(--white); }
+.btn.gold:hover { background:#7a5b0c; border-color:#7a5b0c; }
 .btn.danger { border-color:#e2b6b6; color:var(--danger); background:var(--white); }
 .btn:hover { transform:translateY(-1px); box-shadow:0 3px 8px rgba(29,45,53,.08); }
 .btn:disabled { opacity:.4; cursor:not-allowed; transform:none; }
@@ -134,8 +135,22 @@ tbody tr:hover td { background:#fbfdfd; }
 .badge { display:inline-block; padding:4px 9px; border-radius:12px; font-size:11px; font-weight:700; }
 .badge.gold { background:var(--accent-gold-soft); color:#806718; }
 .badge.member { background:#e8f7f2; color:#287a5d; }
-.row-actions { display:flex; gap:6px; }
+/* IMPORTANT: huwag gawing display:flex ang <td>. Kapag flex ang td, hindi na siya
+   table-cell kaya umiikli ang border-bottom ng row at hindi pantay ang buttons. */
+td.row-actions { display:table-cell; text-align:right; white-space:nowrap; width:1%; vertical-align:middle; }
 .row-actions .btn { padding:5px 9px; font-size:11px; }
+.row-actions .btn + .btn { margin-left:6px; }
+td.row-actions .btn { vertical-align:middle; }
+
+/* Pare-pareho ang taas ng input/select at ng button sa form para laging pantay */
+.field input, .field select { height:42px; }
+.field .pw-row .btn { height:42px; }
+/* Button na may sariling "field" (may blank label sa taas) para kapantay ng mga input */
+.field.btn-field { margin-bottom:15px; }
+.field.btn-field > label { visibility:hidden; }
+.btn-pair { display:flex; gap:8px; }
+.btn-pair .btn { flex:1; height:42px; margin-top:0; white-space:nowrap; }
+.btn-pair .btn.slot-hidden { display:none; }
 .empty-state { text-align:center; padding:30px; color:var(--text-muted); font-size:13px; }
 
 /* ---------- Reports / summary ---------- */
@@ -240,3 +255,44 @@ tbody tr:hover td { background:#fbfdfd; }
   .search-row { align-items:stretch; flex-direction:column; }
   .search-row input { width:100%; }
 }
+
+/* ---------- Modals + printable voucher (shared) ---------- */
+.modal-backdrop { position:fixed; inset:0; background:rgba(15,23,32,.45); display:none; align-items:center; justify-content:center; padding:16px; z-index:60; }
+.modal-backdrop.open { display:flex; }
+.modal { background:#fff; border-radius:14px; padding:24px; width:100%; max-width:420px; box-shadow:0 18px 50px rgba(0,0,0,.2); }
+.modal-actions { display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
+.voucher-card { border-radius:12px; padding:20px 18px; text-align:center; background:#1f9bd1; color:#fff; margin:14px 0; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+.voucher-card img { height:44px; margin-bottom:6px; background:#fff; border-radius:8px; padding:4px 10px; }
+.voucher-card .for { font-style:italic; font-size:13px; opacity:.9; }
+.voucher-card .who { background:#fff; color:#12303f; border-radius:4px; padding:6px 10px; font-weight:700; margin:6px 0 10px; }
+.voucher-card .prize { font-size:20px; font-weight:800; text-transform:uppercase; line-height:1.2; margin:4px 0 10px; }
+.voucher-card .code { font-size:18px; letter-spacing:2px; font-weight:700; margin:6px 0; background:rgba(255,255,255,.18); border-radius:6px; padding:4px; }
+.voucher-card .meta { font-size:12px; opacity:.9; }
+/* Print only the voucher, sa laki ng card (90mm x 57mm). */
+@page { margin:0; }
+@media print {
+  body.print-voucher { background:#fff; }
+  body.print-voucher .app { display:none !important; }
+  body.print-voucher .modal-backdrop { position:static; background:none; padding:12mm; display:block; }
+  body.print-voucher .modal { box-shadow:none; max-width:none; padding:0; background:none; }
+  body.print-voucher .modal-actions, body.print-voucher .modal h2, body.print-voucher .modal .card-subtitle { display:none !important; }
+  body.print-voucher .voucher-card {
+    width:90mm; min-height:57mm; margin:0; padding:4mm 5mm;
+    display:flex; flex-direction:column; justify-content:center; align-items:center;
+    break-inside:avoid; page-break-inside:avoid; border-radius:4mm;
+  }
+  body.print-voucher .voucher-card img { height:9mm; margin-bottom:1.5mm; padding:1mm 3mm; border-radius:2mm; }
+  body.print-voucher .voucher-card .for { font-size:8pt; }
+  body.print-voucher .voucher-card .who { font-size:10pt; padding:1mm 3mm; margin:1.5mm 0 2mm; min-width:60%; }
+  body.print-voucher .voucher-card .prize { font-size:12pt; margin:1mm 0 2mm; }
+  body.print-voucher .voucher-card .code { font-size:11pt; margin:1mm 0; padding:1mm 3mm; letter-spacing:1.5px; }
+  body.print-voucher .voucher-card .meta { font-size:7pt; margin-top:1.5mm; }
+}
+
+/* ---------- Nav badge + dashboard voucher panels ---------- */
+.nav-badge { margin-left:auto; min-width:20px; height:20px; padding:0 6px; border-radius:10px; background:var(--accent-gold); color:#fff; font-size:11px; font-weight:800; display:inline-flex; align-items:center; justify-content:center; }
+.notice-item { display:flex; align-items:center; gap:10px; flex-wrap:wrap; border:1px solid var(--border); border-radius:10px; padding:10px 12px; margin-bottom:8px; font-size:13px; background:#fbfdfd; }
+.notice-item.unread { background:var(--accent-gold-soft); border-color:#ecd98a; }
+.notice-item .grow { flex:1; min-width:180px; }
+.notice-item .sub { font-size:11px; color:var(--text-muted); font-weight:500; margin-top:2px; }
+.code-chip { font-family:monospace; }

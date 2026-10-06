@@ -21,7 +21,6 @@
   .field.invalid .err { display: block; }
   .field.invalid .hint { display: none; }
 
-  .row-actions { white-space: nowrap; }
   .num { text-align: right; font-variant-numeric: tabular-nums; }
 
   @media (max-width: 900px) { .form-grid { grid-template-columns: 1fr 1fr; } }
@@ -32,6 +31,29 @@
     .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
     .table-wrap table { min-width: 640px; }
   }
+
+  /* Pagination */
+  .pager { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 14px; font-size: 13px; }
+  .pager-left { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .pager-info { color: var(--text-muted); }
+  .pager-controls { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .pager-controls .btn { padding: 6px 10px; min-width: 34px; }
+  .pager-controls .btn.active { background: var(--accent-teal); border-color: var(--accent-teal); color: var(--white); }
+  .pager-controls .gap { padding: 0 4px; color: var(--text-muted); }
+  .pager-size { display: flex; align-items: center; gap: 6px; color: var(--text-muted); }
+  @media (max-width: 640px) { .pager { justify-content: center; } }
+
+  /* Transaction history filters */
+  .txn-filters { flex-wrap: wrap; align-items: flex-end; }
+  .txn-filters .fgroup { display: flex; flex-direction: column; gap: 3px; }
+  .txn-filters .fgroup label { font-size: 11px; color: var(--text-muted); }
+  .txn-filters .fgroup.grow { flex: 1; min-width: 180px; }
+  .txn-filters input[type="date"] { flex: none; min-width: 0; width: 150px; }
+  .txn-filters .fgroup.grow input { width: 100%; }
+  @media (max-width: 640px) {
+    .txn-filters .fgroup, .txn-filters input[type="date"], .txn-filters .filter-select { width: 100%; }
+    .txn-filters .btn { flex: 1; }
+  }
 </style>
 </head>
 <body>
@@ -40,19 +62,39 @@
     <div class="main">
       <div class="topbar" id="topbar-slot"></div>
 
-      <div class="card">
+      <div class="card" id="admin-txn-note" style="display:none;">
+        <h2 style="margin-bottom:4px;">Transactions</h2>
+        <div class="card-subtitle" style="margin:0;">Recording transactions is handled by staff. As admin you can review the history below.</div>
+      </div>
+
+      <div class="card" id="new-txn-card">
         <h2>New transaction</h2>
-        <div class="card-subtitle">Record a purchase and the system computes the loyalty points.</div>
+        <div class="card-subtitle">Pick the service and the price. Massage purchases count toward the customer's free reward.</div>
         <form id="txn-form" class="form-grid" novalidate>
           <div class="field" id="f-cust">
             <label for="txn-customer">Customer</label>
             <select id="txn-customer"></select>
             <div class="err" id="e-cust"></div>
           </div>
+          <div class="field" id="f-service">
+            <label for="txn-service">Service type</label>
+            <select id="txn-service"></select>
+            <div class="err" id="e-service"></div>
+          </div>
+          <div class="field" id="f-item">
+            <label for="txn-item">Service</label>
+            <select id="txn-item" disabled><option value="">Select service type first</option></select>
+            <div class="err" id="e-item"></div>
+          </div>
+          <div class="field" id="f-area" style="display:none;">
+            <label for="txn-area">Area (sqm)</label>
+            <input id="txn-area" type="number" min="1" step="1" inputmode="numeric" placeholder="e.g. 40">
+            <div class="err" id="e-area"></div>
+          </div>
           <div class="field" id="f-amount">
             <label for="txn-amount">Amount</label>
-            <input id="txn-amount" type="number" min="0.01" step="0.01" placeholder="0.00" inputmode="decimal">
-            <div class="hint" id="points-preview">Earns 0 points</div>
+            <select id="txn-amount" disabled><option value="">Select service first</option></select>
+            <div class="hint" id="points-preview">Counts ₱0 toward reward</div>
             <div class="err" id="e-amount"></div>
           </div>
           <div class="field" id="f-date">
@@ -60,7 +102,10 @@
             <input id="txn-date" type="date">
             <div class="err" id="e-date"></div>
           </div>
-          <button class="btn solid" type="submit">Record transaction</button>
+          <div class="field btn-field">
+            <label>&nbsp;</label>
+            <div class="btn-pair"><button class="btn solid" type="submit">Record transaction</button></div>
+          </div>
         </form>
         <p style="font-size:12px;color:var(--text-muted);margin-top:10px;" id="rule-text"></p>
       </div>
@@ -69,15 +114,49 @@
         <div class="panel-head">
           <div>
             <h2 style="margin-bottom:4px;">Transaction history</h2>
-            <div class="card-subtitle" style="margin:0;">Review recorded purchases and points earned by each customer.</div>
+            <div class="card-subtitle" style="margin:0;">Review recorded purchases and how much of each counted toward a reward.</div>
           </div>
           <span class="badge member" id="txn-count">0 transactions</span>
         </div>
+        <div class="search-row txn-filters">
+          <div class="fgroup grow">
+            <label for="txn-search">Search</label>
+            <input id="txn-search" type="search" placeholder="Customer or service...">
+          </div>
+          <div class="fgroup">
+            <label for="txn-filter-type">Service type</label>
+            <select class="filter-select" id="txn-filter-type"></select>
+          </div>
+          <div class="fgroup">
+            <label for="txn-from">From</label>
+            <input type="date" id="txn-from">
+          </div>
+          <div class="fgroup">
+            <label for="txn-to">To</label>
+            <input type="date" id="txn-to">
+          </div>
+          <button class="btn" type="button" id="txn-30">Last 30 days</button>
+          <button class="btn" type="button" id="txn-clear">Clear</button>
+        </div>
         <div class="table-wrap"><table>
-          <thead><tr><th>Date</th><th>Customer</th><th class="num">Amount</th><th class="num">Points earned</th><th></th></tr></thead>
+          <thead><tr><th>Date</th><th>Customer</th><th>Service</th><th class="num">Amount</th><th class="num">Counts toward reward</th><th></th></tr></thead>
           <tbody id="txn-rows"></tbody>
         </table></div>
         <div id="txn-empty" class="empty-state" style="display:none;">No transactions yet. Record one above to start earning points.</div>
+        <div class="pager" id="txn-pager">
+          <div class="pager-left">
+            <div class="pager-info" id="pager-info"></div>
+            <label class="pager-size">Rows
+              <select class="filter-select" id="page-size">
+                <option value="10" selected>10</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
+            </label>
+          </div>
+          <div class="pager-controls" id="pager-controls"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -91,16 +170,14 @@
     // (a deletable transaction is an easy way to pocket cash and erase
     // the trail). Only admin can delete.
     const isAdmin = !!session && session.role === 'admin';
+    // Admin doesn't record transactions — staff do. Admin only reviews history.
+    if (isAdmin) {
+      document.getElementById('new-txn-card').style.display = 'none';
+      document.getElementById('admin-txn-note').style.display = '';
+    }
 
-    /* ---------- Settings (tanggap ang luma at bagong key names) ---------- */
-    const raw = readDB(DB_KEYS.settings, {});
-    const settings = {
-      pointsPer:       raw.pointsPer       ?? raw.pointsPerAmount ?? 12,
-      spendPer:        raw.spendPer        ?? raw.amountUnit      ?? 110,
-      redeemThreshold: raw.redeemThreshold ?? 100,
-      storeName:       raw.storeName       ?? 'MediSpa',
-      currency:        raw.currency        ?? '\u20B1'
-    };
+    /* ---------- Settings ---------- */
+    const settings = getSettings();
 
     /* ---------- Helpers ---------- */
     const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, m => (
@@ -120,11 +197,12 @@
       return d.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: '2-digit' });
     }
 
-    function pointsFor(amount) {
-      return Math.floor((Number(amount) || 0) / settings.spendPer) * settings.pointsPer;
+    // Only the qualifying service (Massage by default) counts toward the reward.
+    function pointsFor(amount, category) {
+      return pointsForPurchase(amount, category, settings);
     }
 
-    const today = () => new Date().toISOString().slice(0, 10);
+    const today = () => localISODate();
 
     const loadCustomers = () => readDB(DB_KEYS.customers, []);
     const saveCustomers = list => writeDB(DB_KEYS.customers, list);
@@ -140,8 +218,8 @@
     }
 
     document.getElementById('rule-text').textContent =
-      `Earns ${settings.pointsPer} points per ${settings.currency}${settings.spendPer} spent. ` +
-      `A customer can redeem a reward once they reach ${settings.redeemThreshold} points.`;
+      `Every ${settings.currency}${settings.redeemThreshold.toLocaleString('en-PH')} spent on ${settings.qualifyingCategory.toLowerCase()} earns a reward ` +
+      `(${settings.prizes.join(' / ')}). Other services don't count toward the reward.`;
 
     /* ---------- Customer dropdown ---------- */
     const custSelect = document.getElementById('txn-customer');
@@ -155,11 +233,60 @@
         custs
           .slice()
           .sort((a, b) => displayName(a).localeCompare(displayName(b)))
-          .map(c => `<option value="${esc(c.id)}">${esc(displayName(c))} (${c.points || 0} pts)</option>`)
+          .map(c => `<option value="${esc(c.id)}">${esc(displayName(c))} (${peso(c.points || 0).replace('.00', '')} massage spend)</option>`)
           .join('');
     }
     fillCustomerSelect();
     document.getElementById('txn-date').value = today();
+
+    const serviceSelect = document.getElementById('txn-service');
+    const itemSelect = document.getElementById('txn-item');
+    const areaInput = document.getElementById('txn-area');
+    const amountSelect = document.getElementById('txn-amount');
+    serviceSelect.innerHTML = '<option value="">Select service type</option>' +
+      SERVICE_CATEGORIES.map(c => `<option value="${esc(c)}">${esc(c)}${c === settings.qualifyingCategory ? ' (counts toward reward)' : ''}</option>`).join('');
+
+    const currentItem = () => {
+      const list = SERVICE_MENU[serviceSelect.value] || [];
+      return list.find(x => x.name === itemSelect.value) || null;
+    };
+
+    // Service type -> list of services. Service -> price choices.
+    function fillItems() {
+      const list = SERVICE_MENU[serviceSelect.value] || [];
+      itemSelect.disabled = !list.length;
+      itemSelect.innerHTML = list.length
+        ? '<option value="">Select service</option>' + list.map(x => `<option value="${esc(x.name)}">${esc(x.name)}</option>`).join('')
+        : '<option value="">Select service type first</option>';
+      fillAmounts();
+    }
+    function fillAmounts() {
+      const it = currentItem();
+      document.getElementById('f-area').style.display = (it && it.perSqm) ? '' : 'none';
+      if (!it) {
+        amountSelect.disabled = true;
+        amountSelect.innerHTML = '<option value="">Select service first</option>';
+      } else if (it.perSqm) {
+        amountSelect.disabled = false;
+        amountSelect.innerHTML = `<option value="rate">${peso(it.rate).replace('.00', '')} per sqm</option>`;
+      } else {
+        amountSelect.disabled = false;
+        amountSelect.innerHTML =
+          `<option value="promo">Promo \u2014 ${peso(it.promo).replace('.00', '')}</option>` +
+          `<option value="reg">Regular \u2014 ${peso(it.reg).replace('.00', '')}</option>`;
+      }
+      updatePreview();
+    }
+    // Final amount for the current selection (null if incomplete).
+    function currentAmount() {
+      const it = currentItem();
+      if (!it) return null;
+      if (it.perSqm) {
+        const area = parseFloat(areaInput.value);
+        return Number.isFinite(area) && area > 0 ? Math.round(it.rate * area * 100) / 100 : null;
+      }
+      return amountSelect.value === 'reg' ? it.reg : amountSelect.value === 'promo' ? it.promo : null;
+    }
 
     /* ---------- Validation ---------- */
     function setError(fieldId, msg) {
@@ -169,37 +296,97 @@
       else { f.classList.remove('invalid'); e.textContent = ''; }
       return !msg;
     }
-    function clearErrors() { ['f-cust', 'f-amount', 'f-date'].forEach(id => setError(id, '')); }
+    function clearErrors() { ['f-cust', 'f-service', 'f-item', 'f-area', 'f-amount', 'f-date'].forEach(id => setError(id, '')); }
 
-    const amountInput = document.getElementById('txn-amount');
-    amountInput.addEventListener('input', function () {
-      const pts = pointsFor(this.value);
+    function updatePreview() {
+      const amt = currentAmount();
+      const it = currentItem();
+      const pts = amt ? pointsFor(amt, serviceSelect.value) : 0;
       document.getElementById('points-preview').textContent =
-        `Earns ${pts} point${pts === 1 ? '' : 's'}`;
+        (it && it.perSqm && amt ? `Total ${peso(amt)} \u00B7 ` : '') + `Counts ${peso(pts).replace('.00', '')} toward reward`;
+    }
+    serviceSelect.addEventListener('change', fillItems);
+    itemSelect.addEventListener('change', fillAmounts);
+    amountSelect.addEventListener('change', updatePreview);
+    areaInput.addEventListener('input', updatePreview);
+
+    /* ---------- Pagination ---------- */
+    let currentPage = 1;
+
+    function renderPager(total, startIdx, shown, totalPages) {
+      document.getElementById('txn-pager').style.display = total ? '' : 'none';
+      document.getElementById('pager-info').textContent =
+        total ? `Showing ${startIdx + 1}\u2013${startIdx + shown} of ${total}` : '';
+      const pages = [];
+      for (let i = 1; i <= totalPages; i++) {
+        if (i === 1 || i === totalPages || Math.abs(i - currentPage) <= 1) pages.push(i);
+        else if (pages[pages.length - 1] !== '…') pages.push('…');
+      }
+      document.getElementById('pager-controls').innerHTML =
+        `<button class="btn" data-page="${currentPage - 1}" ${currentPage === 1 ? 'disabled' : ''}>Prev</button>` +
+        pages.map(p => p === '…'
+          ? '<span class="gap">…</span>'
+          : `<button class="btn ${p === currentPage ? 'active' : ''}" data-page="${p}">${p}</button>`).join('') +
+        `<button class="btn" data-page="${currentPage + 1}" ${currentPage === totalPages ? 'disabled' : ''}>Next</button>`;
+    }
+
+    document.getElementById('pager-controls').addEventListener('click', e => {
+      const b = e.target.closest('button[data-page]');
+      if (!b || b.disabled) return;
+      currentPage = parseInt(b.getAttribute('data-page'), 10);
+      renderTxnTable();
+      document.querySelector('.txn-filters').scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
 
     /* ---------- Table ---------- */
     function renderTxnTable() {
       const custs = loadCustomers();
-      const list = loadTxns().slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
-      document.getElementById('txn-empty').style.display = list.length ? 'none' : 'block';
-      document.getElementById('txn-count').textContent =
-        `${list.length} transaction${list.length === 1 ? '' : 's'}`;
+      const all = loadTxns();
+      const q = document.getElementById('txn-search').value.toLowerCase().trim();
+      const type = document.getElementById('txn-filter-type').value;
+      const from = document.getElementById('txn-from').value;
+      const to = document.getElementById('txn-to').value;
+      const filtering = !!(q || type || from || to);
+      const list = all.filter(t => {
+        const c = custs.find(x => x.id === t.customerId);
+        const name = c ? displayName(c) : (t.customerName || 'Deleted customer');
+        const hay = `${name} ${t.service || ''} ${t.category || ''}`.toLowerCase();
+        const d = String(t.date || '');
+        return (!q || hay.includes(q)) && (!type || t.category === type) &&
+               (!from || d >= from) && (!to || d <= to);
+      }).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+      const emptyEl = document.getElementById('txn-empty');
+      emptyEl.textContent = all.length
+        ? 'No transactions match your filters. Clear them to see everything.'
+        : 'No transactions yet. Record one above to start earning points.';
+      emptyEl.style.display = list.length ? 'none' : 'block';
+      document.getElementById('txn-count').textContent = filtering
+        ? `${list.length} of ${all.length} transaction${all.length === 1 ? '' : 's'}`
+        : `${all.length} transaction${all.length === 1 ? '' : 's'}`;
 
-      document.getElementById('txn-rows').innerHTML = list.map(t => {
+      const pageSize = parseInt(document.getElementById('page-size').value, 10) || 10;
+      const totalPages = Math.max(1, Math.ceil(list.length / pageSize));
+      if (currentPage > totalPages) currentPage = totalPages;
+      if (currentPage < 1) currentPage = 1;
+      const startIdx = (currentPage - 1) * pageSize;
+      const pageItems = list.slice(startIdx, startIdx + pageSize);
+      renderPager(list.length, startIdx, pageItems.length, totalPages);
+
+      document.getElementById('txn-rows').innerHTML = pageItems.map(t => {
         const c = custs.find(x => x.id === t.customerId);
         const name = c ? displayName(c) : (t.customerName || 'Deleted customer');
         // Only admin can delete a recorded transaction; staff cannot, so
         // a transaction can't quietly be entered then erased to hide cash.
         const delCell = isAdmin
           ? `<button class="btn danger" data-del="${esc(t.id)}">Delete</button>`
-          : `<span style="color:var(--text-muted);font-size:12px;">Admin only</span>`;
+          : '';
         return `
         <tr>
           <td>${formatDate(t.date)}</td>
           <td>${esc(name)}</td>
+          <td>${t.category ? esc(t.category) : '<span style="color:var(--text-muted);">—</span>'}${t.service ? `<div style="font-size:11px;color:var(--text-muted);">${esc(t.service)}${t.area ? ' \u00B7 ' + esc(t.area) + ' sqm' : ''}${t.priceType === 'promo' ? ' \u00B7 Promo' : ''}</div>` : ''}</td>
           <td class="num">${peso(t.amount)}</td>
-          <td class="num">${t.pointsEarned || 0}</td>
+          <td class="num">${peso(t.pointsEarned || 0)}</td>
           <td class="row-actions">${delCell}</td>
         </tr>`;
       }).join('');
@@ -216,11 +403,16 @@
       const cust = custs.find(c => c.id === custId);
       if (!cust) ok = setError('f-cust', 'Choose a customer.') && ok;
 
-      const amount = parseFloat(amountInput.value);
-      if (!Number.isFinite(amount) || amount <= 0) {
-        ok = setError('f-amount', 'Enter an amount greater than 0.') && ok;
-      } else if (amount > 1000000) {
-        ok = setError('f-amount', 'That amount looks too large. Check it again.') && ok;
+      const category = serviceSelect.value;
+      if (!SERVICE_CATEGORIES.includes(category)) ok = setError('f-service', 'Choose a service type.') && ok;
+
+      const item = currentItem();
+      if (!item) ok = setError('f-item', 'Choose a service.') && ok;
+      if (item && item.perSqm && !(parseFloat(areaInput.value) > 0)) ok = setError('f-area', 'Enter the area in sqm.') && ok;
+
+      const amount = currentAmount();
+      if (item && (amount === null || !Number.isFinite(amount) || amount <= 0)) {
+        ok = setError('f-amount', 'Choose the price.') && ok;
       }
 
       const date = document.getElementById('txn-date').value;
@@ -229,8 +421,10 @@
 
       if (!ok) return;
 
+      // Staff only: the admin doesn't record transactions.
+      if (isAdmin) { toast('Only staff can record transactions.', 'warning'); return; }
       const rounded = Math.round(amount * 100) / 100;
-      const pointsEarned = pointsFor(rounded);
+      const pointsEarned = pointsFor(rounded, category);
 
       const txns = loadTxns();
       txns.push({
@@ -238,6 +432,10 @@
         customerId: cust.id,
         customerName: displayName(cust),
         amount: rounded,
+        category,
+        service: item.name,
+        priceType: item.perSqm ? 'per-sqm' : amountSelect.value,
+        area: item.perSqm ? parseFloat(areaInput.value) : null,
         pointsEarned,
         date
       });
@@ -247,25 +445,31 @@
       cust.points = before + pointsEarned;
       saveCustomers(custs);
 
-      toast(`Recorded \u2014 ${displayName(cust)} earned ${pointsEarned} pts`);
+      toast(pointsEarned
+        ? `Recorded \u2014 ${peso(pointsEarned).replace('.00', '')} added to ${displayName(cust)}'s massage spend`
+        : 'Recorded \u2014 this service doesn\'t count toward the massage reward');
+      // Clear history filters so the new row is always visible right after recording.
+      ['txn-search', 'txn-from', 'txn-to'].forEach(id => { document.getElementById(id).value = ''; });
+      document.getElementById('txn-filter-type').value = '';
+      currentPage = 1;
       renderTxnTable();
       fillCustomerSelect();
 
       this.reset();
       clearErrors();
       document.getElementById('txn-date').value = today();
-      document.getElementById('points-preview').textContent = 'Earns 0 points';
+      fillItems();
 
-      // Redemption itself is requested and approved manually on the
-      // Customers page (both staff and admin can do that there). Here
+      // Staff request the reward on the Customers page; the admin
+      // approves it there or on the Dashboard. Here
       // we just let whoever recorded the sale know the customer now
       // qualifies for a reward.
-      if (before < settings.redeemThreshold && cust.points >= settings.redeemThreshold) {
-        toast(`${displayName(cust)} has reached ${settings.redeemThreshold} points \u2014 redeem on the Customers page.`, 'success');
+      if (Math.floor(cust.points / settings.redeemThreshold) > Math.floor(before / settings.redeemThreshold)) {
+        toast(`${displayName(cust)} reached ${peso(settings.redeemThreshold).replace('.00', '')} in ${settings.qualifyingCategory.toLowerCase()} \u2014 reward unlocked! Request the voucher on the Customers page.`, 'success');
       }
     });
 
-    /* ---------- Delete (ibinabalik ang points) ---------- */
+    /* ---------- Delete (reward progress is taken back) ---------- */
     document.getElementById('txn-rows').addEventListener('click', async function (e) {
       const btn = e.target.closest('button');
       if (!btn) return;
@@ -276,7 +480,7 @@
       const txns = loadTxns();
       const t = txns.find(x => x.id === delId);
       if (!t) return;
-      const ok = await confirmDialog(`Delete this ${peso(t.amount)} transaction? ${t.pointsEarned || 0} points will be taken back.`, { title: 'Delete transaction', confirmText: 'Delete', danger: true });
+      const ok = await confirmDialog(`Delete this ${peso(t.amount)} transaction? ${peso(t.pointsEarned || 0).replace('.00', '')} of reward progress will be taken back.`, { title: 'Delete transaction', confirmText: 'Delete', danger: true });
       if (!ok) return;
 
       const custs = loadCustomers();
@@ -289,6 +493,28 @@
       renderTxnTable();
       fillCustomerSelect();
       toast('Transaction deleted');
+    });
+
+    /* ---------- History filters ---------- */
+    document.getElementById('txn-filter-type').innerHTML = '<option value="">All service types</option>' +
+      SERVICE_CATEGORIES.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+    // Any filter / page-size change goes back to page 1; delete keeps the current page.
+    const resetAndRender = () => { currentPage = 1; renderTxnTable(); };
+    ['txn-search', 'txn-from', 'txn-to'].forEach(id =>
+      document.getElementById(id).addEventListener('input', resetAndRender));
+    document.getElementById('txn-filter-type').addEventListener('change', resetAndRender);
+    document.getElementById('page-size').addEventListener('change', resetAndRender);
+    document.getElementById('txn-clear').addEventListener('click', () => {
+      ['txn-search', 'txn-from', 'txn-to'].forEach(id => { document.getElementById(id).value = ''; });
+      document.getElementById('txn-filter-type').value = '';
+      resetAndRender();
+    });
+    document.getElementById('txn-30').addEventListener('click', () => {
+      const to = new Date(), from = new Date();
+      from.setDate(from.getDate() - 29);
+      document.getElementById('txn-from').value = localISODate(from);
+      document.getElementById('txn-to').value = localISODate(to);
+      resetAndRender();
     });
 
     renderTxnTable();

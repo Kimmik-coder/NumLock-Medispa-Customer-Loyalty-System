@@ -7,9 +7,10 @@
 <link rel="stylesheet" href="css/style.css">
 <style>
   .filter-row {
-    display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 18px;
+    display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 0;
   }
-  .filter-row .field { display: flex; flex-direction: column; gap: 4px; }
+  .filter-row .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 0; }
+  .filter-row .field input { height: 38px; }
   .filter-row label { font-size: 12px; color: var(--text-muted, #667); }
   .filter-row .btn { height: 38px; }
 
@@ -21,15 +22,44 @@
 
   .kpi-sub { font-size: 12px; color: var(--text-muted, #667); margin-top: 2px; }
 
+  /* 4 KPI cards = 4 columns (dati 3 kaya mag-isa yung pang-apat) */
+  .kpi-row { grid-template-columns: repeat(4, 1fr); }
+  @media (max-width: 900px) { .kpi-row { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 720px) { .kpi-row { grid-template-columns: 1fr; } }
+
+  .print-title { display: none; }
+
   @media (max-width: 640px) {
     .filter-row { flex-direction: column; align-items: stretch; }
     .filter-row .field, .filter-row .btn { width: 100%; }
     .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
     .table-wrap table { min-width: 480px; }
   }
+  @page { size: A4 portrait; margin: 0; }
   @media print {
-    .sidebar, .topbar, .filter-row, #print-report { display: none !important; }
+    body { background: #fff; }
+    .sidebar, .topbar, #filter-card, #print-card { display: none !important; }
+    .app { display: block; }
+    .main { padding: 14mm 14mm 12mm; }
+    .print-title { display: block; margin: 0; }
+    .print-head { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #238f8b; padding-bottom: 8px; margin-bottom: 14px; }
+    .print-head .ph-store { font-size: 22px; font-weight: 800; color: #238f8b; line-height: 1.1; }
+    .print-head .ph-title { font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #44545b; margin-top: 3px; }
+    .print-head .ph-meta { text-align: right; font-size: 11px; color: #44545b; line-height: 1.6; }
+    .card, .kpi-card { box-shadow: none; break-inside: avoid; page-break-inside: avoid; }
+    .card { margin-bottom: 14px; padding: 14px 16px; border: 1px solid #cfdcdc; }
+    .kpi-row { grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+    .kpi-card { padding: 12px 14px; border: 1px solid #cfdcdc; }
+    .chart-wrap svg { max-width: 100%; }
+    table { font-size: 12px; }
+    th { background: #eef6f6; color: #1d2d35; border-bottom: 2px solid #b9cfcf; }
+    td, th { padding: 9px 10px; }
+    tbody tr:nth-child(even) td { background: #f7fbfb; }
+    tr { break-inside: avoid; }
+    .print-sign { display: flex !important; gap: 40px; margin-top: 36px; }
   }
+  .print-head, .print-sign { display: none; }
+  @media print { .print-head { display: flex; } }
 </style>
 </head>
 <body>
@@ -38,7 +68,18 @@
     <div class="main">
       <div class="topbar" id="topbar-slot"></div>
 
-      <div class="card">
+      <div class="print-head">
+        <div>
+          <div class="ph-store" id="ph-store">MediSpa</div>
+          <div class="ph-title">Sales &amp; Loyalty Report</div>
+        </div>
+        <div class="ph-meta">
+          <div>Period: <strong id="ph-range">All time</strong></div>
+          <div>Generated: <span id="ph-generated"></span></div>
+        </div>
+      </div>
+
+      <div class="card" id="filter-card">
         <div class="filter-row">
           <div class="field">
             <label for="f-from">From</label>
@@ -68,7 +109,7 @@
           <div class="kpi-value" id="r-avg">\u20B10.00</div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-label">Points redeemed</div>
+          <div class="kpi-label">Rewards redeemed</div>
           <div class="kpi-value" id="r-redeemed">0</div>
         </div>
       </div>
@@ -79,15 +120,20 @@
       </div>
 
       <div class="card">
-        <div class="panel-head"><div><h2 style="margin-bottom:4px;">Top customers by points</h2><div class="card-subtitle" style="margin:0;">A quick summary for monitoring customer spending and loyalty activity.</div></div></div>
+        <div class="panel-head"><div><h2 style="margin-bottom:4px;">Top customers by massage spend</h2><div class="card-subtitle" style="margin:0;">A quick summary for monitoring customer spending and loyalty activity. All-time total spent includes spend carried over before the system was used.</div></div></div>
         <div class="table-wrap"><table>
-          <thead><tr><th>Name</th><th class="num">Points</th><th class="num">Total spent</th><th>Status</th></tr></thead>
+          <thead><tr><th>Name</th><th class="num">Massage spend (toward next reward)</th><th class="num">Total spent</th><th>Status</th></tr></thead>
           <tbody id="r-rows"></tbody>
         </table></div>
         <div id="r-empty" class="empty-state" style="display:none;">No data yet for this range.</div>
       </div>
 
-      <div class="card">
+      <div class="print-sign">
+        <div style="flex:1;border-top:1px solid #8a9aa0;padding-top:4px;font-size:11px;color:#44545b;">Prepared by</div>
+        <div style="flex:1;border-top:1px solid #8a9aa0;padding-top:4px;font-size:11px;color:#44545b;">Approved by (Admin)</div>
+      </div>
+
+      <div class="card" id="print-card">
         <button class="btn solid" id="print-report" type="button">Print this report</button>
       </div>
     </div>
@@ -98,12 +144,8 @@
     requireRole(['admin']);
     renderShell('report.html', 'Report');
 
-    const raw = readDB(DB_KEYS.settings, {});
-    const settings = {
-      redeemThreshold: raw.redeemThreshold ?? 100,
-      currency: raw.currency ?? '\u20B1'
-    };
-    const RED_KEY = DB_KEYS.redemptions || 'medispa_redemptions';
+    const settings = getSettings();
+    const RED_KEY = DB_KEYS.redemptions;
 
     const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, m => (
       { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]
@@ -123,7 +165,7 @@
       const d = new Date(iso);
       return isNaN(d) ? iso : d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
     }
-    const isoToday = () => new Date().toISOString().slice(0, 10);
+    const isoToday = () => localISODate();
 
     const customers = readDB(DB_KEYS.customers, []);
     const allTxns = readDB(DB_KEYS.transactions, []);
@@ -149,18 +191,21 @@
 
     function render() {
       const txns = allTxns.filter(t => inRange(t.date));
-      const reds = redemptions.filter(r => inRange(r.date));
+      // Only approved/received vouchers count; pending requests haven't been granted yet.
+      const reds = redemptions.filter(r => redemptionStatus(r) !== 'pending' && inRange(r.approvedDate || redemptionDate(r)));
 
       const totalRevenue = txns.reduce((s, t) => s + Number(t.amount || 0), 0);
       document.getElementById('r-revenue').textContent = peso(totalRevenue);
       document.getElementById('r-count').textContent = txns.length;
       document.getElementById('r-avg').textContent = peso(txns.length ? totalRevenue / txns.length : 0);
-      document.getElementById('r-redeemed').textContent =
-        reds.reduce((s, r) => s + (r.points || 0), 0);
+      document.getElementById('r-redeemed').textContent = reds.length;
 
       const from = fromEl.value, to = toEl.value;
       document.getElementById('r-range').textContent =
         (from || to) ? `${from ? formatDate(from) : 'Start'} \u2013 ${to ? formatDate(to) : 'Today'}` : 'All time';
+      document.getElementById('ph-range').textContent = document.getElementById('r-range').textContent;
+      document.getElementById('ph-store').textContent = settings.storeName || 'MediSpa';
+      document.getElementById('ph-generated').textContent = new Date().toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' });
 
       // Points and spend per customer, scoped to the filtered range
       const spentByCustomer = {};
@@ -179,14 +224,15 @@
       document.getElementById('r-empty').style.display = hasRows ? 'none' : 'block';
 
       const rowsToShow = (from || to) ? ranked.filter(r => r.spend > 0) : ranked;
+      const carriedOver = c => (from || to) ? 0 : (Number.isFinite(c.startingPoints) ? c.startingPoints : 0);
       rowsEl.innerHTML = rowsToShow.map(({ c, spend }) => {
         const pts = c.points || 0;
         const ready = pts >= settings.redeemThreshold;
         return `
         <tr>
           <td>${esc(displayName(c))}</td>
-          <td class="num">${pts}</td>
-          <td class="num">${peso(spend)}</td>
+          <td class="num">${peso(pts)}</td>
+          <td class="num">${peso(spend + carriedOver(c))}</td>
           <td>${ready ? '<span class="badge gold">Loyalty Ready</span>' : '<span class="badge member">Member</span>'}</td>
         </tr>`;
       }).join('');
@@ -249,8 +295,8 @@
       const to = new Date();
       const from = new Date();
       from.setDate(from.getDate() - 29);
-      toEl.value = to.toISOString().slice(0, 10);
-      fromEl.value = from.toISOString().slice(0, 10);
+      toEl.value = localISODate(to);
+      fromEl.value = localISODate(from);
       render();
     });
     fromEl.addEventListener('change', render);

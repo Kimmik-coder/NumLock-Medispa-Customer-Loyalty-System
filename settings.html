@@ -43,7 +43,7 @@
 
       <div class="card">
         <h2>Store &amp; loyalty settings</h2>
-        <div class="card-subtitle">Configure the points rules used by the customer loyalty system.</div>
+        <div class="card-subtitle">Set which service earns the free reward, how much customers must spend, and the store details.</div>
         <form id="settings-form" class="form-grid" novalidate>
           <div class="field" id="f-name">
             <label for="s-name">Store name</label>
@@ -55,24 +55,37 @@
             <input id="s-currency" maxlength="3">
             <div class="err" id="e-currency"></div>
           </div>
-          <div class="field" id="f-points">
-            <label for="s-points">Points earned</label>
-            <input id="s-points" type="number" min="1" step="1">
-            <div class="err" id="e-points"></div>
-          </div>
-          <div class="field" id="f-unit">
-            <label for="s-unit">Per amount spent</label>
-            <input id="s-unit" type="number" min="1" step="0.01">
-            <div class="err" id="e-unit"></div>
+          <div class="field" id="f-category">
+            <label for="s-category">Qualifying service</label>
+            <select id="s-category"></select>
+            <div class="hint">Only this service counts toward the reward</div>
+            <div class="err" id="e-category"></div>
           </div>
           <div class="field" id="f-threshold">
-            <label for="s-threshold">Redeem threshold (points)</label>
+            <label for="s-threshold">Spend needed for a reward</label>
             <input id="s-threshold" type="number" min="1" step="1">
             <div class="err" id="e-threshold"></div>
           </div>
-          <button class="btn solid" type="submit">Save settings</button>
+          <div class="field btn-field">
+            <label>&nbsp;</label>
+            <div class="btn-pair"><button class="btn solid" type="submit">Save settings</button></div>
+          </div>
         </form>
         <div class="rule-preview" id="rule-preview"></div>
+      </div>
+
+      <div class="card">
+        <h2>Reward prizes</h2>
+        <div class="card-subtitle">These appear in the prize dropdown when a reward is requested. Saved together with the settings above.</div>
+        <div id="prize-list" style="margin-bottom:12px;"></div>
+        <div class="field" id="f-prize" style="max-width:420px;">
+          <label for="s-prize">Add a prize</label>
+          <div class="pw-row">
+            <input id="s-prize" placeholder="e.g. Free 60-minute foot reflexology">
+            <button class="btn pw-toggle" type="button" id="add-prize">Add</button>
+          </div>
+          <div class="err" id="e-prize"></div>
+        </div>
       </div>
 
       <div class="card">
@@ -104,7 +117,10 @@
             </div>
             <div class="err" id="e-confirm"></div>
           </div>
-          <button class="btn solid" type="submit">Update password</button>
+          <div class="field btn-field">
+            <label>&nbsp;</label>
+            <div class="btn-pair"><button class="btn solid" type="submit">Update password</button></div>
+          </div>
         </form>
       </div>
 
@@ -121,8 +137,7 @@
     const session = requireRole(['admin']);
     renderShell('settings.html', 'Settings');
 
-    const RED_KEY = DB_KEYS.redemptions || 'medispa_redemptions';
-
+    
     /* ---------- Helpers ---------- */
     function setError(fieldId, msg) {
       const f = document.getElementById(fieldId);
@@ -134,55 +149,71 @@
     function clearErrors(ids) { ids.forEach(id => setError(id, '')); }
 
     /* ---------- Settings form ---------- */
-    // Tanggap ang luma at bagong key names para hindi masira ang ibang pages.
-    function readSettings() {
-      const s = readDB(DB_KEYS.settings, {});
-      return {
-        storeName: s.storeName || 'MediSpa',
-        currency: s.currency || '\u20B1',
-        pointsPer: s.pointsPer ?? s.pointsPerAmount ?? 12,
-        spendPer: s.spendPer ?? s.amountUnit ?? 110,
-        redeemThreshold: s.redeemThreshold ?? 100
-      };
-    }
+    let prizes = [];
 
     function updatePreview(s) {
       document.getElementById('rule-preview').textContent =
-        `Customers earn ${s.pointsPer} point${s.pointsPer === 1 ? '' : 's'} for every ${s.currency}${s.spendPer} spent, ` +
-        `and can redeem a reward once they reach ${s.redeemThreshold} points.`;
+        `Every ${s.currency}${Number(s.redeemThreshold).toLocaleString('en-PH')} a customer spends on ${s.qualifyingCategory.toLowerCase()} earns one reward: ` +
+        `${s.prizes.join(' / ') || 'no prize set'}.`;
+    }
+
+    function renderPrizes() {
+      document.getElementById('prize-list').innerHTML = prizes.map((p, i) => `
+        <div class="recent-item" style="margin-bottom:6px;">
+          <span>${escapeHTML(p)}</span>
+          <button class="btn danger" type="button" data-rm="${i}" style="margin-left:auto;" ${prizes.length === 1 ? 'disabled title="Keep at least one prize"' : ''}>Remove</button>
+        </div>`).join('');
+      updatePreview(collectSettingsDraft());
     }
 
     function loadSettingsIntoForm() {
-      const s = readSettings();
+      const s = getSettings();
       document.getElementById('s-name').value = s.storeName;
       document.getElementById('s-currency').value = s.currency;
-      document.getElementById('s-points').value = s.pointsPer;
-      document.getElementById('s-unit').value = s.spendPer;
+      document.getElementById('s-category').innerHTML = SERVICE_CATEGORIES
+        .map(c => `<option value="${escapeHTML(c)}">${escapeHTML(c)}</option>`).join('');
+      document.getElementById('s-category').value = s.qualifyingCategory;
       document.getElementById('s-threshold').value = s.redeemThreshold;
-      updatePreview(s);
+      prizes = s.prizes.slice();
+      renderPrizes();
     }
-    loadSettingsIntoForm();
-
-    const settingsFieldIds = ['f-name', 'f-currency', 'f-points', 'f-unit', 'f-threshold'];
-    ['s-name', 's-currency', 's-points', 's-unit', 's-threshold'].forEach(id => {
-      document.getElementById(id).addEventListener('input', () => {
-        const s = collectSettingsDraft();
-        if (s) updatePreview(s);
-      });
-    });
 
     function collectSettingsDraft() {
-      const points = parseFloat(document.getElementById('s-points').value);
-      const unit = parseFloat(document.getElementById('s-unit').value);
       const threshold = parseFloat(document.getElementById('s-threshold').value);
       return {
         storeName: document.getElementById('s-name').value.trim() || 'MediSpa',
         currency: document.getElementById('s-currency').value.trim() || '\u20B1',
-        pointsPer: Number.isFinite(points) ? points : 0,
-        spendPer: Number.isFinite(unit) ? unit : 0,
-        redeemThreshold: Number.isFinite(threshold) ? threshold : 0
+        qualifyingCategory: document.getElementById('s-category').value,
+        redeemThreshold: Number.isFinite(threshold) ? threshold : 0,
+        prizes: prizes.slice()
       };
     }
+
+    const settingsFieldIds = ['f-name', 'f-currency', 'f-category', 'f-threshold'];
+    ['s-name', 's-currency', 's-category', 's-threshold'].forEach(id => {
+      document.getElementById(id).addEventListener('input', () => updatePreview(collectSettingsDraft()));
+    });
+
+    document.getElementById('add-prize').addEventListener('click', function () {
+      const input = document.getElementById('s-prize');
+      const v = input.value.trim();
+      if (!v) return setError('f-prize', 'Type a prize name first.');
+      if (prizes.some(p => p.toLowerCase() === v.toLowerCase())) return setError('f-prize', 'That prize is already in the list.');
+      setError('f-prize', '');
+      prizes.push(v);
+      input.value = '';
+      renderPrizes();
+    });
+    document.getElementById('s-prize').addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); document.getElementById('add-prize').click(); }
+    });
+    document.getElementById('prize-list').addEventListener('click', function (e) {
+      const btn = e.target.closest('button[data-rm]');
+      if (!btn || prizes.length <= 1) return;
+      prizes.splice(Number(btn.getAttribute('data-rm')), 1);
+      renderPrizes();
+    });
+    loadSettingsIntoForm();
 
     document.getElementById('settings-form').addEventListener('submit', function (e) {
       e.preventDefault();
@@ -195,29 +226,22 @@
       const currency = document.getElementById('s-currency').value.trim();
       if (!currency) ok = setError('f-currency', 'Enter a currency symbol, e.g. \u20B1.') && ok;
 
-      const points = parseFloat(document.getElementById('s-points').value);
-      if (!Number.isFinite(points) || points < 1) ok = setError('f-points', 'Must be 1 or more.') && ok;
-
-      const unit = parseFloat(document.getElementById('s-unit').value);
-      if (!Number.isFinite(unit) || unit <= 0) ok = setError('f-unit', 'Must be greater than 0.') && ok;
-
       const threshold = parseFloat(document.getElementById('s-threshold').value);
       if (!Number.isFinite(threshold) || threshold < 1) ok = setError('f-threshold', 'Must be 1 or more.') && ok;
 
+      if (!prizes.length) { toast('Add at least one prize.', 'error'); ok = false; }
       if (!ok) return;
 
       writeDB(DB_KEYS.settings, {
-        storeName: name || 'MediSpa',
+        version: SETTINGS_VERSION,
+        storeName: name,
         currency,
-        pointsPer: points,
-        spendPer: unit,
+        qualifyingCategory: document.getElementById('s-category').value,
         redeemThreshold: threshold,
-        // legacy mirrors, in case an un-updated page still reads these
-        pointsPerAmount: points,
-        amountUnit: unit
+        prizes: prizes.slice()
       });
-      updatePreview({ storeName: name, currency, pointsPer: points, spendPer: unit, redeemThreshold: threshold });
-      toast('Settings saved');
+      updatePreview(collectSettingsDraft());
+      toast('Settings saved. Use Recalculate on the Customers page if you changed the qualifying service.');
     });
 
     /* ---------- Password form ---------- */
@@ -270,7 +294,6 @@
       const ok = await confirmDialog('This will erase all customers, transactions, redemptions, and settings in this browser. Continue?', { title: 'Reset demo data', confirmText: 'Reset', danger: true });
       if (!ok) return;
       Object.values(DB_KEYS).forEach(k => { if (k !== DB_KEYS.session) localStorage.removeItem(k); });
-      localStorage.removeItem(RED_KEY);
       seedIfEmpty();
       loadSettingsIntoForm();
       toast('Data reset to sample data');

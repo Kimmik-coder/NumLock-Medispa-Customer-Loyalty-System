@@ -9,9 +9,10 @@ The prototype now demonstrates the core planned frontend flows:
 - **Login** — demo authentication screen using the supplied MediSpa logo.
 - **Dashboard** — KPI cards, sales overview chart, recent customers, quick actions, and loyalty-rule summary.
 - **Customer** — add/edit/delete customer records, loyalty status badges, search, and status filtering.
-- **Transaction** — record a purchase, automatically calculate points, update the customer's balance, and offer a printable reward voucher when the threshold is reached.
+- **Transaction** — record a purchase with its service (Massage, Nail, Body & Facial, Physical Therapy, Cleaning). Only massage purchases count toward the reward. The history table can be searched and filtered by service type and date range.
+- **Loyalty reward** — every ₱10,000 spent on massage earns one reward. The prize is chosen from a dropdown (default: *Free 90-minute massage*) when the reward is requested, then approved and printed as a voucher.
 - **Report** — revenue, transaction count, average transaction, customer points, and total spending with print support.
-- **Setting** — store name, loyalty rules, password update, and demo-data reset.
+- **Setting** — store name, qualifying service, spend needed, the list of prizes shown in the dropdown, password update, and demo-data reset.
 
 All major screens are connected through the shared sidebar navigation. The layout is responsive for desktop/tablet/mobile widths, with a mobile slide-out navigation and overlay.
 
@@ -34,10 +35,21 @@ Two roles are supported, both stored in `js/app.js`'s seed data:
 
 | Role | Username | Password | Access |
 |---|---|---|---|
-| Admin | `admin` | `admin123` | All pages: Dashboard, Customer, Transaction, Report, Settings |
+| Admin | `admin` | `admin123` | Approves vouchers, sees notifications, reviews Customers/Transactions (read-only), Report, Settings. Does **not** add customers or record transactions |
 | Staff | `staff` | `staff123` | Dashboard, Customer, Transaction only — no Report or Settings |
 
 Role is assigned per user in the seed data (`DB_KEYS.users`) and stored on the login session. The sidebar hides links a role can't use, and the Report/Settings pages themselves also check the role on load (via `requireRole(['admin'])` in `js/app.js`), so a staff account can't get in even by typing the URL directly.
+
+## Voucher workflow
+
+1. **Staff** clicks *Redeem* on a Loyalty Ready customer and picks the prize -> *pending*.
+2. **Admin** approves it (Dashboard or Customers page) or **rejects** it (the request is removed and nothing is deducted). Admin never requests or prints.
+3. **Staff** sees it under *Approved - ready to print* (Dashboard / Customers), prints it for the therapist, then clicks *Mark as received*.
+4. **Admin** gets a notification on the Dashboard (and a badge on Home) that the voucher was received.
+
+## Transactions
+
+Staff pick *Service type -> Service -> Price* (Promo or Regular, from the MediSpa price list). Cleaning is priced per sqm, so staff enter the area and the total is computed. Prices live in `SERVICE_MENU` in `js/app.js`.
 
 ## Run
 
@@ -47,7 +59,7 @@ Unzip the project and open `index.html` in a browser.
 ### Option B — local server (recommended)
 
 ```bash
-cd medispa
+cd NumLock-Medispa-Customer-Loyalty-System-main
 python3 -m http.server 8000
 ```
 
@@ -55,13 +67,24 @@ Then open `http://localhost:8000`.
 
 ## Demo flow for presentation
 
-1. Log in.
-2. From Dashboard, show the KPI cards, Sales Overview, Recent Customers, and Loyalty Program summary.
-3. Open **Customer** and demonstrate search/filter plus Add/Edit/Delete.
-4. Open **Transaction**, select a customer, enter an amount, and record it. Points are calculated automatically.
-5. Show the updated transaction history and customer points.
-6. Open **Report** to show revenue and loyalty/customer spending information and demonstrate Print.
-7. Open **Setting** to show configurable loyalty rules and demo-data reset.
+Before starting: open **Setting** (admin) -> **Reset demo data** so everyone starts from the same sample data. Rosela Reyes begins at ₱10,200 massage spend, so she is already Loyalty Ready.
+
+**Part 1 - Staff (`staff` / `staff123`)**
+1. Log in. Show the Dashboard (KPI cards, Sales Overview, Recent Customers, Loyalty Program summary).
+2. **Customer**: search/filter, then Add / Edit a customer.
+3. **Transaction**: pick a customer, service type, service and price, then record it. Only massage counts toward the reward. Try the history filters (search, service type, date range).
+4. **Customer**: on Rosela click **Redeem**, choose the prize -> status becomes *Pending approval*. Log out.
+
+**Part 2 - Admin (`admin` / `admin123`)**
+5. Dashboard shows the pending request and a badge on Home. Click **Approve voucher** (or **Reject** to show the decline path). Log out.
+
+**Part 3 - Staff again**
+6. Dashboard / Customer: **Print voucher**, then **Mark as received**. Log out.
+
+**Part 4 - Admin again**
+7. Dashboard shows the "voucher received" notification.
+8. **Report**: revenue and customer spending, with Print.
+9. **Setting**: loyalty rules, prize list, password, demo-data reset.
 
 ## Data and limitations
 

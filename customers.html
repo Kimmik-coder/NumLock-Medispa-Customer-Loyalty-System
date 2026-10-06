@@ -6,7 +6,7 @@
 <title>MediSpa - Customers</title>
 <link rel="stylesheet" href="css/style.css">
 <style>
-  /* ---- Page-scoped additions. Pwede mong ilipat sa css/style.css mamaya. ---- */
+  /* ---- Page-scoped additions ---- */
   /* Pareho ang taas ng lahat ng field: hindi nagtutulak ang hint/error text */
   .form-grid { align-items: start; }
   .field { position: relative; padding-bottom: 20px; }
@@ -21,10 +21,6 @@
   .field.invalid .err { display: block; }
   .field.invalid .hint { display: none; }
 
-  .row-actions { white-space: nowrap; }
-  .row-actions .btn { margin-left: 4px; }
-  .btn.gold { border-color: #c79a2e; color: #8a6a10; }
-  .btn.gold:hover { background: #fdf6e3; }
 
   /* The voucher action button's label changes with status ("Redeem",
      "Approve voucher", "Mark received"). Give it one fixed width so
@@ -32,35 +28,40 @@
      whatever the label's length. */
   .row-actions .voucher-action {
     display: inline-block;
-    width: 150px;
+    width: 124px;
     text-align: center;
   }
+  #cust-rows td, .table-wrap thead th { padding-left: 6px; padding-right: 6px; }
+  .row-actions .btn { padding: 5px 8px; }
+  .row-actions .btn + .btn { margin-left: 4px; }
+  /* Voucher button on its own line, View/Edit/Delete below it, so the row never overflows */
+  td.row-actions { width: 1%; min-width: 170px; text-align: right; }
+  .row-actions .voucher-action { display: block; width: 100%; margin: 0 0 5px; }
+  .row-actions .voucher-action.slot-hidden { display: none; }
+  #cust-rows td:nth-child(3) { max-width: 190px; overflow: hidden; text-overflow: ellipsis; }
 
   /* Reserve this button's grid cell even while "hidden" so the auto-fit
      .form-grid doesn't collapse/re-flow its columns and shove the teal
      Save/Add button sideways when Cancel appears or disappears. */
   .btn.slot-hidden { visibility: hidden; pointer-events: none; }
 
+  .progress { width: 110px; height: 6px; background: #e6eeee; border-radius: 4px; overflow: hidden; margin-top: 4px; }
+  .progress > i { display: block; height: 100%; background: #31b9b5; }
+  .progress.full > i { background: #c79a2e; }
   .panel-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
-  /* Voucher modal */
-  .modal-backdrop {
-    position: fixed; inset: 0; background: rgba(15,23,32,.45);
-    display: none; align-items: center; justify-content: center; padding: 16px; z-index: 60;
-  }
-  .modal-backdrop.open { display: flex; }
-  .modal {
-    background: #fff; border-radius: 14px; padding: 24px; width: 100%; max-width: 420px;
-    box-shadow: 0 18px 50px rgba(0,0,0,.2);
-  }
-  .voucher {
-    border: 2px dashed #c79a2e; border-radius: 12px; padding: 18px; text-align: center;
-    background: #fffdf5; margin: 14px 0;
-  }
-  .voucher .code {
-    font-size: 22px; letter-spacing: 2px; font-weight: 700; margin: 6px 0;
-  }
-  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+  .prize-field select { width: 100%; }
+
+  /* Pagination */
+  .pager { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 14px; font-size: 13px; }
+  .pager-left { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .pager-info { color: var(--text-muted); }
+  .pager-controls { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .pager-controls .btn { padding: 6px 10px; min-width: 34px; }
+  .pager-controls .btn.active { background: var(--accent-teal); border-color: var(--accent-teal); color: var(--white); }
+  .pager-controls .gap { padding: 0 4px; color: var(--text-muted); }
+  .pager-size { display: flex; align-items: center; gap: 6px; color: var(--text-muted); }
+  @media (max-width: 640px) { .pager { justify-content: center; } }
 
   /* Responsive */
   @media (max-width: 900px) {
@@ -74,12 +75,6 @@
     .search-row input, .search-row .filter-select { width: 100%; }
     .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
     .table-wrap table { min-width: 720px; }
-  }
-  @media print {
-    .sidebar, .topbar, .modal-actions { display: none !important; }
-    .modal-backdrop { position: static; background: none; }
-    /* Only the voucher should print — hide the form/table behind it. */
-    .main { display: none !important; }
   }
 </style>
 </head>
@@ -115,27 +110,33 @@
             <div class="err" id="e-email"></div>
           </div>
           <div class="field" id="f-points">
-            <label for="cust-points">Starting points</label>
+            <label for="cust-points">Starting massage spend (₱)</label>
             <input id="cust-points" type="number" min="0" step="1" value="0">
+            <div class="hint">Massage spend carried over before using the system</div>
             <div class="err" id="e-points"></div>
           </div>
-          <button class="btn solid" type="submit" id="save-btn">Add customer</button>
-          <button class="btn slot-hidden" type="button" id="cancel-edit">Cancel</button>
+          <div class="field btn-field">
+            <label>&nbsp;</label>
+            <div class="btn-pair">
+              <button class="btn solid" type="submit" id="save-btn">Add customer</button>
+              <button class="btn slot-hidden" type="button" id="cancel-edit">Cancel</button>
+            </div>
+          </div>
         </form>
       </div>
       <div class="card" id="admin-customer-note" style="display:none;">
         <h2 style="margin-bottom:4px;">Customer records</h2>
-        <div class="card-subtitle" style="margin:0;">Adding and editing customer records is handled by staff. You can request, approve, and confirm loyalty vouchers below.</div>
+        <div class="card-subtitle" style="margin:0;">Adding customers and recording transactions is handled by staff. Your job here is to approve the voucher requests staff send you; you'll be notified on the Dashboard once a voucher is handed to the therapist.</div>
       </div>
 
       <div class="card">
         <div class="panel-head">
           <div>
             <h2 style="margin-bottom:4px;">All customers</h2>
-            <div class="card-subtitle" style="margin:0;">Search, edit, and redeem rewards for your customers.</div>
+            <div class="card-subtitle" style="margin:0;">Search and manage customers. A reward unlocks at every ₱10,000 of massage spend: staff request it, the admin approves it, then staff print the voucher for the therapist.</div>
           </div>
           <div class="panel-tools">
-            <button class="btn" type="button" id="recalc-btn" title="Recompute points from transactions and redemptions">Recalculate points</button>
+            <button class="btn" type="button" id="recalc-btn" title="Recompute massage spend from transactions and redemptions">Recalculate</button>
             <span class="badge member" id="customer-count">0 customers</span>
           </div>
         </div>
@@ -147,32 +148,59 @@
             <option value="ready">Loyalty Ready</option>
             <option value="member">Member</option>
           </select>
+          <select class="filter-select" id="voucher-filter" title="Filter by voucher status">
+            <option value="all">All vouchers</option>
+            <option value="none">No voucher</option>
+            <option value="pending">Pending approval</option>
+            <option value="approved">Approved</option>
+            <option value="received">Received</option>
+          </select>
+          <select class="filter-select" id="sort-by" title="Sort customers">
+            <option value="name">Sort: Name (A–Z)</option>
+            <option value="spend-desc">Sort: Highest spend</option>
+            <option value="spend-asc">Sort: Lowest spend</option>
+            <option value="joined-desc">Sort: Newest joined</option>
+            <option value="joined-asc">Sort: Oldest joined</option>
+          </select>
         </div>
 
         <div class="table-wrap"><table>
           <thead>
-            <tr><th>Name</th><th>Phone</th><th>Email</th><th>Points</th><th>Status</th><th>Voucher</th><th>Joined</th><th></th></tr>
+            <tr><th>Name</th><th>Phone</th><th>Email</th><th>Massage spend</th><th>Status</th><th>Voucher</th><th>Joined</th><th></th></tr>
           </thead>
           <tbody id="cust-rows"></tbody>
         </table></div>
         <div id="cust-empty" class="empty-state" style="display:none;">No customers match your search. Clear the filter or add a new customer.</div>
+        <div class="pager" id="cust-pager">
+          <div class="pager-left">
+            <div class="pager-info" id="pager-info"></div>
+            <label class="pager-size">Rows
+              <select class="filter-select" id="page-size">
+                <option value="10" selected>10</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
+            </label>
+          </div>
+          <div class="pager-controls" id="pager-controls"></div>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- Voucher modal -->
-  <div class="modal-backdrop" id="voucher-modal" role="dialog" aria-modal="true" aria-labelledby="voucher-title">
+  <!-- Prize picker modal (step 1 of redeeming) -->
+  <div class="modal-backdrop" id="prize-modal" role="dialog" aria-modal="true" aria-labelledby="prize-title">
     <div class="modal">
-      <h2 id="voucher-title" style="margin-top:0;">Reward redeemed</h2>
-      <p class="card-subtitle" id="voucher-sub" style="margin-top:4px;"></p>
-      <div class="voucher">
-        <div style="font-size:12px;letter-spacing:1px;">MEDISPA REWARD VOUCHER</div>
-        <div class="code" id="voucher-code">—</div>
-        <div id="voucher-meta" style="font-size:13px;"></div>
+      <h2 id="prize-title" style="margin-top:0;">Request reward</h2>
+      <p class="card-subtitle" id="prize-sub" style="margin-top:4px;"></p>
+      <div class="field prize-field" style="padding-bottom:0;">
+        <label for="prize-select">Prize</label>
+        <select id="prize-select"></select>
       </div>
-      <div class="modal-actions">
-        <button class="btn" type="button" id="voucher-print">Print</button>
-        <button class="btn solid" type="button" id="voucher-close">Done</button>
+      <div class="modal-actions" style="margin-top:16px;">
+        <button class="btn" type="button" id="prize-cancel">Cancel</button>
+        <button class="btn solid" type="button" id="prize-ok">Request reward</button>
       </div>
     </div>
   </div>
@@ -193,9 +221,10 @@
     const session = requireAuth();
     renderShell('customers.html', 'Customers');
 
-    // Both admin and staff can request, approve, and mark loyalty vouchers
-    // as received on this page. Only adding/editing/deleting customer
-    // records is restricted to staff.
+    // Voucher flow:  staff request -> ADMIN approves -> staff print + hand to
+    // therapist -> staff mark received -> admin is notified on the Dashboard.
+    // Admin never requests/prints/receives; staff never approve.
+    // Only staff add/edit/delete customer records.
     const isAdmin = !!session && session.role === 'admin';
     if (isAdmin) {
       document.getElementById('add-customer-card').style.display = 'none';
@@ -203,10 +232,7 @@
     }
 
     /* ---------- Settings & keys ---------- */
-    const settings = Object.assign(
-      { redeemThreshold: 100, pointsPer: 12, spendPer: 110, currency: '\u20B1' },
-      readDB(DB_KEYS.settings, {})
-    );
+    const settings = getSettings();
     const TX_KEY  = DB_KEYS.transactions || 'medispa_transactions';
     const RED_KEY = DB_KEYS.redemptions  || 'medispa_redemptions';
 
@@ -237,10 +263,7 @@
       return d.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: '2-digit' });
     }
 
-    function pointsFor(amount) {
-      const a = Number(amount) || 0;
-      return Math.floor(a / settings.spendPer) * settings.pointsPer;
-    }
+    const pesoWhole = n => settings.currency + Math.round(Number(n) || 0).toLocaleString('en-PH');
 
     const loadCustomers = () => readDB(DB_KEYS.customers, []);
     const saveCustomers = list => writeDB(DB_KEYS.customers, list);
@@ -250,34 +273,6 @@
     function displayName(c) {
       if (c.lastName || c.firstName) return `${c.lastName || ''}${c.lastName && c.firstName ? ', ' : ''}${c.firstName || ''}`;
       return c.name || '-';
-    }
-
-    /* ---------- Redemption status helpers ----------
-       A redemption moves through: pending -> approved -> received.
-       Older records (created before this workflow existed) have no
-       `status` field but already have a `code`, meaning they were
-       already approved; `received` tells us if they went further. */
-    function redemptionStatus(r) {
-      if (r.status) return r.status;
-      return r.received ? 'received' : 'approved';
-    }
-
-    function redemptionDate(r) {
-      const st = redemptionStatus(r);
-      if (st === 'received') return r.receivedDate || r.approvedDate || r.date || r.requestedDate || '';
-      if (st === 'approved') return r.approvedDate || r.date || r.requestedDate || '';
-      return r.requestedDate || r.date || '';
-    }
-
-    function markReceived(redemptionId) {
-      const reds = loadRedemptions();
-      const r = reds.find(x => x.id === redemptionId);
-      if (!r) return false;
-      r.status = 'received';
-      r.received = true;
-      r.receivedDate = new Date().toISOString().slice(0, 10);
-      saveRedemptions(reds);
-      return true;
     }
 
     /* ---------- Validation ---------- */
@@ -321,10 +316,41 @@
       }
 
       if (!Number.isFinite(values.points) || values.points < 0) {
-        ok = setError('f-points', 'Points must be 0 or higher.') && ok;
+        ok = setError('f-points', 'Must be 0 or higher.') && ok;
       }
       return ok;
     }
+
+    /* ---------- Pagination ---------- */
+    let currentPage = 1;
+
+    function renderPager(total, startIdx, shown, totalPages) {
+      const pager = document.getElementById('cust-pager');
+      pager.style.display = total ? '' : 'none';
+      document.getElementById('pager-info').textContent =
+        total ? `Showing ${startIdx + 1}\u2013${startIdx + shown} of ${total}` : '';
+
+      // Compact page list: 1 … 4 5 [6] 7 8 … 20
+      const pages = [];
+      for (let i = 1; i <= totalPages; i++) {
+        if (i === 1 || i === totalPages || Math.abs(i - currentPage) <= 1) pages.push(i);
+        else if (pages[pages.length - 1] !== '…') pages.push('…');
+      }
+      document.getElementById('pager-controls').innerHTML =
+        `<button class="btn" data-page="${currentPage - 1}" ${currentPage === 1 ? 'disabled' : ''}>Prev</button>` +
+        pages.map(p => p === '…'
+          ? '<span class="gap">…</span>'
+          : `<button class="btn ${p === currentPage ? 'active' : ''}" data-page="${p}">${p}</button>`).join('') +
+        `<button class="btn" data-page="${currentPage + 1}" ${currentPage === totalPages ? 'disabled' : ''}>Next</button>`;
+    }
+
+    document.getElementById('pager-controls').addEventListener('click', e => {
+      const b = e.target.closest('button[data-page]');
+      if (!b || b.disabled) return;
+      currentPage = parseInt(b.getAttribute('data-page'), 10);
+      renderTable();
+      document.querySelector('.search-row').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
 
     /* ---------- Table ---------- */
     function renderTable() {
@@ -341,20 +367,48 @@
       function latestRedemptionFor(id) {
         const arr = redsByCustomer[id];
         if (!arr || !arr.length) return null;
-        return arr.slice().sort((a, b) => redemptionDate(b).localeCompare(redemptionDate(a)))[0];
+        return arr.slice().sort(newestRedemptionFirst)[0];
       }
+
+      const voucherFilter = document.getElementById('voucher-filter').value;
+      const sortBy = document.getElementById('sort-by').value;
+      const voucherState = c => {
+        const l = latestRedemptionFor(c.id);
+        return l ? redemptionStatus(l) : 'none';
+      };
 
       const filtered = list.filter(c => {
         const hay = `${displayName(c)} ${c.phone || ''} ${c.email || ''}`.toLowerCase();
         const ready = (c.points || 0) >= settings.redeemThreshold;
-        return (!query || hay.includes(query)) && (filter === 'all' || (filter === 'ready' ? ready : !ready));
+        return (!query || hay.includes(query))
+          && (filter === 'all' || (filter === 'ready' ? ready : !ready))
+          && (voucherFilter === 'all' || voucherState(c) === voucherFilter);
       });
+
+      const byName = (a, b) => displayName(a).localeCompare(displayName(b), 'en', { sensitivity: 'base' });
+      const sorters = {
+        'name': byName,
+        'spend-desc': (a, b) => (b.points || 0) - (a.points || 0) || byName(a, b),
+        'spend-asc': (a, b) => (a.points || 0) - (b.points || 0) || byName(a, b),
+        'joined-desc': (a, b) => (b.joined || '').localeCompare(a.joined || '') || byName(a, b),
+        'joined-asc': (a, b) => (a.joined || '').localeCompare(b.joined || '') || byName(a, b)
+      };
+      filtered.sort(sorters[sortBy] || byName);
+
+      // Pagination
+      const pageSize = parseInt(document.getElementById('page-size').value, 10) || 10;
+      const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+      if (currentPage > totalPages) currentPage = totalPages;
+      if (currentPage < 1) currentPage = 1;
+      const startIdx = (currentPage - 1) * pageSize;
+      const pageItems = filtered.slice(startIdx, startIdx + pageSize);
+      renderPager(filtered.length, startIdx, pageItems.length, totalPages);
 
       document.getElementById('customer-count').textContent =
         `${filtered.length} of ${list.length} customers`;
       document.getElementById('cust-empty').style.display = filtered.length ? 'none' : 'block';
 
-      document.getElementById('cust-rows').innerHTML = filtered.map(c => {
+      document.getElementById('cust-rows').innerHTML = pageItems.map(c => {
         const pts = c.points || 0;
         const ready = pts >= settings.redeemThreshold;
         const latest = latestRedemptionFor(c.id);
@@ -367,10 +421,11 @@
         } else if (latestStatus === 'pending') {
           voucherCell = '<span class="badge gold">Pending approval</span>';
         } else if (latestStatus === 'approved') {
-          voucherCell = '<span class="badge gold">Awaiting pickup</span>';
+          voucherCell = '<span class="badge gold">Approved \u00B7 for therapist</span>';
         } else {
           voucherCell = `<span class="badge member">Received \u00B7 ${formatDate(latest.receivedDate)}</span>`;
         }
+        if (latest) voucherCell += `<div style="font-size:11px;color:var(--text-muted);margin-top:3px;">${esc(latest.prize || settings.prizes[0])}</div>`;
 
         // Voucher action — same for admin and staff. Which action shows
         // depends on where the latest redemption is in its lifecycle.
@@ -378,14 +433,19 @@
         // invisibly reserved via .slot-hidden) so the View/Edit/Delete
         // buttons after it never shift left/right between rows.
         let actionBtn;
+        const slotHidden = '<button class="btn gold voucher-action slot-hidden" disabled tabindex="-1" aria-hidden="true">Redeem</button>';
         if (latestStatus === 'pending') {
-          actionBtn = `<button class="btn gold voucher-action" data-approve="${esc(latest.id)}">Approve voucher</button>`;
+          actionBtn = isAdmin
+            ? `<button class="btn gold voucher-action" data-approve="${esc(latest.id)}">Approve voucher</button><button class="btn danger voucher-action" data-reject="${esc(latest.id)}">Reject</button>`
+            : `<button class="btn voucher-action" disabled title="Waiting for the admin to approve">Awaiting approval</button>`;
         } else if (latestStatus === 'approved') {
-          actionBtn = `<button class="btn gold voucher-action" data-mark-received="${esc(latest.id)}">Mark received</button>`;
-        } else if (ready) {
+          actionBtn = isAdmin
+            ? `<button class="btn voucher-action" disabled title="Staff will print it and hand it to the therapist">With staff</button>`
+            : `<button class="btn gold voucher-action" data-print-voucher="${esc(latest.id)}">Print voucher</button>`;
+        } else if (ready && !isAdmin) {
           actionBtn = `<button class="btn gold voucher-action" data-request-redeem="${esc(c.id)}">Redeem</button>`;
         } else {
-          actionBtn = `<button class="btn gold voucher-action slot-hidden" disabled tabindex="-1" aria-hidden="true">Redeem</button>`;
+          actionBtn = slotHidden;
         }
 
         // Anyone can open the read-only profile (info + full purchase and
@@ -402,7 +462,7 @@
           <td>${esc(displayName(c))}</td>
           <td>${esc(c.phone || '-')}</td>
           <td>${esc(c.email || '-')}</td>
-          <td>${pts}</td>
+          <td>${pesoWhole(pts)}<div class="progress ${ready ? 'full' : ''}" title="${pesoWhole(pts)} of ${pesoWhole(settings.redeemThreshold)}"><i style="width:${Math.min(100, pts / settings.redeemThreshold * 100)}%"></i></div></td>
           <td>${ready
               ? '<span class="badge gold">Loyalty Ready</span>'
               : '<span class="badge member">Member</span>'}</td>
@@ -446,13 +506,18 @@
 
       if (id) {
         const idx = list.findIndex(c => c.id === id);
-        if (idx > -1) list[idx] = Object.assign({}, list[idx], record);
+        if (idx > -1) {
+          // Manual balance edit: shift startingPoints by the same amount so "Recalculate" keeps it.
+          const delta = record.points - (list[idx].points || 0);
+          record.startingPoints = (Number.isFinite(list[idx].startingPoints) ? list[idx].startingPoints : 0) + delta;
+          list[idx] = Object.assign({}, list[idx], record);
+        }
         toast('Customer updated');
       } else {
         list.push(Object.assign({
           id: cryptoId(),
           startingPoints: values.points,
-          joined: new Date().toISOString().slice(0, 10)
+          joined: localISODate()
         }, record));
         toast('Customer added');
       }
@@ -485,11 +550,11 @@
         .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
       const reds = loadRedemptions()
         .filter(r => r.customerId === c.id)
-        .sort((a, b) => redemptionDate(b).localeCompare(redemptionDate(a)));
+        .sort(newestRedemptionFirst);
 
       const txRows = tx.length
-        ? tx.map(t => `<tr><td>${formatDate(t.date)}</td><td>${settings.currency}${money(t.amount)}</td><td>+${t.pointsEarned || 0} pts</td></tr>`).join('')
-        : `<tr><td colspan="3" style="color:var(--text-muted);">No purchases recorded yet.</td></tr>`;
+        ? tx.map(t => `<tr><td>${formatDate(t.date)}</td><td>${esc(t.category || '—')}</td><td>${settings.currency}${money(t.amount)}</td><td>${t.pointsEarned ? '+' + pesoWhole(t.pointsEarned) : '—'}</td></tr>`).join('')
+        : `<tr><td colspan="4" style="color:var(--text-muted);">No purchases recorded yet.</td></tr>`;
 
       const redRows = reds.length
         ? reds.map(r => {
@@ -497,28 +562,28 @@
             const statusBadge = st === 'pending'
               ? '<span class="badge gold">Pending approval</span>'
               : st === 'approved'
-                ? '<span class="badge gold">Awaiting pickup</span>'
+                ? '<span class="badge gold">Approved \u00B7 for therapist</span>'
                 : `<span class="badge member">Received \u00B7 ${formatDate(r.receivedDate)}</span>`;
-            // Both admin and staff can mark an approved voucher as
-            // received. A pending voucher has no code yet, so there's
-            // nothing to mark received until it's approved.
-            const actionBtn = st === 'approved'
-              ? `<button class="btn" data-mark-received="${esc(r.id)}">Mark as received</button>`
+            // Staff print the approved voucher and mark it received once
+            // it's with the therapist. Admin only sees the status.
+            const actionBtn = (st === 'approved' && !isAdmin)
+              ? `<button class="btn" data-print-voucher="${esc(r.id)}">Print / receive</button>`
               : '';
             return `<tr>
               <td>${formatDate(redemptionDate(r))}</td>
+              <td>${esc(r.prize || settings.prizes[0])}</td>
               <td>${r.code ? esc(r.code) : '<span style="color:var(--text-muted);">—</span>'}</td>
-              <td>-${r.points || 0} pts</td>
+              <td>-${pesoWhole(r.points || 0)}</td>
               <td>${statusBadge}</td>
               <td>${actionBtn}</td>
             </tr>`;
           }).join('')
-        : `<tr><td colspan="5" style="color:var(--text-muted);">No rewards redeemed yet.</td></tr>`;
+        : `<tr><td colspan="6" style="color:var(--text-muted);">No rewards redeemed yet.</td></tr>`;
 
       document.getElementById('profile-title').textContent = displayName(c);
       document.getElementById('profile-body').innerHTML = `
         <div class="summary-strip" style="grid-template-columns:repeat(3,1fr); margin-bottom:16px;">
-          <div class="mini-stat"><span>Points balance</span><strong>${c.points || 0}</strong></div>
+          <div class="mini-stat"><span>Massage spend toward next reward</span><strong>${pesoWhole(c.points || 0)} / ${pesoWhole(settings.redeemThreshold)}</strong></div>
           <div class="mini-stat"><span>Status</span><strong>${ready
               ? '<span class="badge gold">Loyalty Ready</span>'
               : '<span class="badge member">Member</span>'}</strong></div>
@@ -529,12 +594,12 @@
         </p>
         <h3 style="margin:0 0 8px; font-size:14px;">Purchase history</h3>
         <div class="table-wrap" style="margin-bottom:18px;"><table>
-          <thead><tr><th>Date</th><th>Amount</th><th>Points earned</th></tr></thead>
+          <thead><tr><th>Date</th><th>Service</th><th>Amount</th><th>Counts toward reward</th></tr></thead>
           <tbody>${txRows}</tbody>
         </table></div>
         <h3 style="margin:0 0 8px; font-size:14px;">Redemption history</h3>
         <div class="table-wrap"><table>
-          <thead><tr><th>Date</th><th>Voucher code</th><th>Points used</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Date</th><th>Prize</th><th>Voucher code</th><th>Spend used</th><th>Status</th><th></th></tr></thead>
           <tbody>${redRows}</tbody>
         </table></div>
       `;
@@ -544,109 +609,49 @@
     document.getElementById('profile-close').addEventListener('click', () => profileModal.classList.remove('open'));
     profileModal.addEventListener('click', e => {
       if (e.target === profileModal) { profileModal.classList.remove('open'); return; }
-      const markId = e.target.closest('button')?.getAttribute('data-mark-received');
-      if (!markId) return;
-      if (markReceived(markId)) {
-        toast('Voucher marked as received');
-        openProfile(profileModal.dataset.customerId);
+      const printId = e.target.closest('button')?.getAttribute('data-print-voucher');
+      if (printId) {
+        openVoucherModal(printId, () => { renderTable(); openProfile(profileModal.dataset.customerId); });
       }
     });
 
-    /* ---------- Redeem + voucher ---------- */
-    const modal = document.getElementById('voucher-modal');
-
-    function openVoucher(customer, code, cost) {
-      document.getElementById('voucher-sub').textContent =
-        `${displayName(customer)} used ${cost} points. Remaining balance: ${customer.points} points.`;
-      document.getElementById('voucher-code').textContent = code;
-      document.getElementById('voucher-meta').textContent =
-        `Issued ${formatDate(new Date().toISOString())} \u00B7 Present this code at the front desk`;
-      modal.classList.add('open');
-    }
-    document.getElementById('voucher-close').addEventListener('click', () => modal.classList.remove('open'));
-    document.getElementById('voucher-print').addEventListener('click', () => window.print());
-    modal.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('open'); });
+    /* ---------- Request reward (staff) ---------- */
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape') {
-        modal.classList.remove('open');
         profileModal.classList.remove('open');
+        prizeModal.classList.remove('open');
       }
     });
 
-    function makeCode() {
-      const d = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-      const r = Math.random().toString(36).slice(2, 6).toUpperCase();
-      return `MS-${d}-${r}`;
-    }
+    // Step 1 (staff only): request a redemption and pick the prize from the
+    // dropdown. No points are deducted and no code exists until the admin approves.
+    const prizeModal = document.getElementById('prize-modal');
+    const prizeSelect = document.getElementById('prize-select');
+    let prizeCustomerId = null;
 
-    // Step 1: staff or admin requests a redemption. This just records
-    // intent — no points are deducted and no code exists yet, so it can
-    // be approved (or simply never approved) without any cleanup needed.
-    async function requestRedeem(custId) {
-      const list = loadCustomers();
-      const c = list.find(x => x.id === custId);
+    function requestRedeem(custId) {
+      const c = loadCustomers().find(x => x.id === custId);
       if (!c) return;
-      const cost = settings.redeemThreshold;
-      if ((c.points || 0) < cost) { toast('Not enough points to redeem', 'error'); return; }
-      const ok = await confirmDialog(
-        `Request a reward redemption for ${displayName(c)}? This uses ${cost} points once approved.`,
-        { title: 'Request redemption', confirmText: 'Request' }
-      );
-      if (!ok) return;
-
-      const reds = loadRedemptions();
-      reds.push({
-        id: cryptoId(),
-        customerId: c.id,
-        customerName: displayName(c),
-        points: cost,
-        status: 'pending',
-        code: null,
-        requestedDate: new Date().toISOString().slice(0, 10),
-        approvedDate: null,
-        receivedDate: null,
-        received: false
-      });
-      saveRedemptions(reds);
-      renderTable();
-      toast('Redemption requested \u2014 awaiting approval');
+      if ((c.points || 0) < settings.redeemThreshold) { toast('Not enough massage spend to redeem', 'error'); return; }
+      prizeCustomerId = c.id;
+      document.getElementById('prize-sub').textContent =
+        `${displayName(c)} reached ${pesoWhole(settings.redeemThreshold)} in ${settings.qualifyingCategory.toLowerCase()}. Choose the prize.`;
+      prizeSelect.innerHTML = settings.prizes.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+      prizeModal.classList.add('open');
     }
-
-    // Step 2: staff or admin approves a pending redemption. Points are
-    // deducted and the voucher code is generated only at this point.
-    async function approveRedeem(redemptionId) {
-      const reds = loadRedemptions();
-      const r = reds.find(x => x.id === redemptionId);
-      if (!r) return;
-      const list = loadCustomers();
-      const c = list.find(x => x.id === r.customerId);
-      if (!c) { toast('Customer record not found', 'error'); return; }
-      const cost = r.points || settings.redeemThreshold;
-      if ((c.points || 0) < cost) {
-        toast(`${displayName(c)} no longer has enough points for this voucher.`, 'error');
-        return;
-      }
-      const ok = await confirmDialog(
-        `Approve this reward for ${displayName(c)}? This uses ${cost} points.`,
-        { title: 'Approve voucher', confirmText: 'Approve' }
-      );
-      if (!ok) return;
-
-      c.points = (c.points || 0) - cost;
-      const code = makeCode();
-      r.status = 'approved';
-      r.code = code;
-      r.approvedDate = new Date().toISOString().slice(0, 10);
-      saveRedemptions(reds);
-      saveCustomers(list);
+    document.getElementById('prize-cancel').addEventListener('click', () => prizeModal.classList.remove('open'));
+    prizeModal.addEventListener('click', e => { if (e.target === prizeModal) prizeModal.classList.remove('open'); });
+    document.getElementById('prize-ok').addEventListener('click', function () {
+      const res = requestVoucher(prizeCustomerId, prizeSelect.value);
+      prizeModal.classList.remove('open');
+      if (!res.ok) { toast(res.msg, 'warning'); return; }
       renderTable();
-      toast('Voucher approved');
-      openVoucher(c, code, cost);
-    }
+      toast('Reward requested \u2014 sent to the admin for approval');
+    });
 
     /* ---------- Recalculate points from transactions ---------- */
     document.getElementById('recalc-btn').addEventListener('click', async function () {
-      const ok = await confirmDialog('Recompute every customer\u2019s points from their transactions and redemptions?', { title: 'Recalculate points', confirmText: 'Recalculate' });
+      const ok = await confirmDialog('Recompute every customer\u2019s massage spend from their transactions and redemptions?', { title: 'Recalculate', confirmText: 'Recalculate' });
       if (!ok) return;
       const list = loadCustomers();
       const tx = readDB(TX_KEY, []);
@@ -655,7 +660,7 @@
       list.forEach(c => {
         const earned = tx
           .filter(t => (t.customerId || t.custId || t.customer) === c.id)
-          .reduce((sum, t) => sum + pointsFor(t.amount), 0);
+          .reduce((sum, t) => sum + pointsForPurchase(t.amount, t.category, settings), 0);
         // Only redemptions that have actually been approved (points
         // deducted) count against the balance — a pending request
         // hasn't touched the customer's points yet.
@@ -668,7 +673,7 @@
 
       saveCustomers(list);
       renderTable();
-      toast('Points recalculated');
+      toast('Massage spend recalculated');
     });
 
     /* ---------- Row actions ---------- */
@@ -680,18 +685,14 @@
       const viewId = btn.getAttribute('data-view');
       const requestId = btn.getAttribute('data-request-redeem');
       const approveId = btn.getAttribute('data-approve');
-      const markId = btn.getAttribute('data-mark-received');
+      const rejectId = btn.getAttribute('data-reject');
+      const printId = btn.getAttribute('data-print-voucher');
 
       if (viewId) return openProfile(viewId);
       if (requestId) return requestRedeem(requestId);
-      if (approveId) return approveRedeem(approveId);
-      if (markId) {
-        if (markReceived(markId)) {
-          renderTable();
-          toast('Voucher marked as received');
-        }
-        return;
-      }
+      if (rejectId) { if (await rejectVoucher(rejectId)) renderTable(); return; }
+      if (approveId) { if (await approveVoucher(approveId)) renderTable(); return; }
+      if (printId) return openVoucherModal(printId, renderTable);
 
       if ((editId || delId) && isAdmin) {
         toast('Admins don\u2019t manage customer records \u2014 that\u2019s handled by staff.', 'warning');
@@ -719,6 +720,10 @@
 
       if (delId) {
         const c = list.find(x => x.id === delId);
+        if (loadRedemptions().some(r => r.customerId === delId && ['pending', 'approved'].includes(redemptionStatus(r)))) {
+          toast('This customer has a voucher in progress. Finish or reject it before deleting.', 'warning');
+          return;
+        }
         const ok = await confirmDialog(`Delete ${c ? displayName(c) : 'this customer'}? This cannot be undone.`, { title: 'Delete customer', confirmText: 'Delete', danger: true });
         if (!ok) return;
         saveCustomers(list.filter(x => x.id !== delId));
@@ -727,8 +732,11 @@
       }
     });
 
-    document.getElementById('customer-search').addEventListener('input', renderTable);
-    document.getElementById('status-filter').addEventListener('change', renderTable);
+    // Any filter/sort/page-size change goes back to page 1; add/edit/delete keep the current page.
+    const resetAndRender = () => { currentPage = 1; renderTable(); };
+    document.getElementById('customer-search').addEventListener('input', resetAndRender);
+    ['status-filter', 'voucher-filter', 'sort-by', 'page-size'].forEach(id =>
+      document.getElementById(id).addEventListener('change', resetAndRender));
     renderTable();
   </script>
 </body>

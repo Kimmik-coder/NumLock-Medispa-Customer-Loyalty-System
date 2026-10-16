@@ -77,6 +77,7 @@
     .table-wrap table { min-width: 720px; }
   }
 </style>
+  <link rel="icon" type="image/png" href="assets/medispa-logo.png">
 </head>
 <body>
   <div class="app">
@@ -136,13 +137,14 @@
             <div class="card-subtitle" style="margin:0;">Search and manage customers. A reward unlocks at every ₱10,000 of massage spend: staff request it, the admin approves it, then staff print the voucher for the therapist.</div>
           </div>
           <div class="panel-tools">
+            <button class="btn gold" type="button" id="bulk-voucher-btn" style="display:none;"></button>
             <button class="btn" type="button" id="recalc-btn" title="Recompute massage spend from transactions and redemptions">Recalculate</button>
             <span class="badge member" id="customer-count">0 customers</span>
           </div>
         </div>
 
         <div class="search-row">
-          <input id="customer-search" type="search" placeholder="Search name, phone, or email...">
+          <input id="customer-search" type="search" placeholder="Search name, phone, email, or voucher code...">
           <select class="filter-select" id="status-filter">
             <option value="all">All statuses</option>
             <option value="ready">Loyalty Ready</option>
@@ -353,7 +355,20 @@
     });
 
     /* ---------- Table ---------- */
+    // Bulk voucher button: admin = approve all pending, staff = print approved batch
+    function updateBulkBtn() {
+      const b = document.getElementById('bulk-voucher-btn');
+      const n = isAdmin ? pendingVouchers().length : approvedVouchers().length;
+      b.style.display = n ? '' : 'none';
+      b.textContent = isAdmin ? `Approve all pending (${n})` : `Print approved vouchers (${n})`;
+    }
+    document.getElementById('bulk-voucher-btn').addEventListener('click', async () => {
+      if (isAdmin) { if (await approveAllVouchers()) renderTable(); }
+      else openBulkVoucherModal(renderTable);
+    });
+
     function renderTable() {
+      updateBulkBtn();
       const list = loadCustomers();
       const query = (document.getElementById('customer-search').value || '').toLowerCase().trim();
       const filter = document.getElementById('status-filter').value;
@@ -378,7 +393,8 @@
       };
 
       const filtered = list.filter(c => {
-        const hay = `${displayName(c)} ${c.phone || ''} ${c.email || ''}`.toLowerCase();
+        const codes = (redsByCustomer[c.id] || []).map(r => r.code || '').join(' ');
+        const hay = `${displayName(c)} ${c.phone || ''} ${c.email || ''} ${codes}`.toLowerCase();
         const ready = (c.points || 0) >= settings.redeemThreshold;
         return (!query || hay.includes(query))
           && (filter === 'all' || (filter === 'ready' ? ready : !ready))

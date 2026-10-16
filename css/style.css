@@ -296,3 +296,26 @@ td.row-actions .btn { vertical-align:middle; }
 .notice-item .grow { flex:1; min-width:180px; }
 .notice-item .sub { font-size:11px; color:var(--text-muted); font-weight:500; margin-top:2px; }
 .code-chip { font-family:monospace; }
+
+/* ---------- Bulk voucher print sheet ---------- */
+#bulk-print-sheet { display:none; }
+@media print {
+  body.print-bulk { background:#fff; }
+  body.print-bulk .app, body.print-bulk .modal-backdrop, body.print-bulk .confirm-backdrop, body.print-bulk .toast-stack { display:none !important; }
+  body.print-bulk #bulk-print-sheet { display:block; }
+  body.print-bulk #bulk-print-sheet.bulk-grid { display:grid; grid-template-columns:repeat(2, 90mm); gap:5mm 6mm; justify-content:center; }
+  body.print-bulk #bulk-print-sheet.bulk-single .voucher-card { page-break-after:always; break-after:page; margin:0 auto; }
+  body.print-bulk #bulk-print-sheet.bulk-single .voucher-card:last-child { page-break-after:auto; break-after:auto; }
+  body.print-bulk #bulk-print-sheet .voucher-card {
+    width:90mm; min-height:57mm; margin:0; padding:4mm 5mm; box-sizing:border-box;
+    display:flex; flex-direction:column; justify-content:center; align-items:center;
+    break-inside:avoid; page-break-inside:avoid; border-radius:4mm;
+  }
+  body.print-bulk #bulk-print-sheet.bulk-single .voucher-card { margin:0 auto; }
+  body.print-bulk .voucher-card img { height:9mm; margin-bottom:1.5mm; padding:1mm 3mm; border-radius:2mm; }
+  body.print-bulk .voucher-card .for { font-size:8pt; }
+  body.print-bulk .voucher-card .who { font-size:10pt; padding:1mm 3mm; margin:1.5mm 0 2mm; min-width:60%; }
+  body.print-bulk .voucher-card .prize { font-size:12pt; margin:1mm 0 2mm; }
+  body.print-bulk .voucher-card .code { font-size:11pt; margin:1mm 0; padding:1mm 3mm; letter-spacing:1.5px; }
+  body.print-bulk .voucher-card .meta { font-size:7pt; margin-top:1.5mm; }
+}

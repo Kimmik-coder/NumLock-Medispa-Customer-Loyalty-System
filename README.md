@@ -45,6 +45,12 @@ Role is assigned per user in the seed data (`DB_KEYS.users`) and stored on the l
 1. **Staff** clicks *Redeem* on a Loyalty Ready customer and picks the prize -> *pending*.
 2. **Admin** approves it (Dashboard or Customers page) or **rejects** it (the request is removed and nothing is deducted). Admin never requests or prints.
 3. **Staff** sees it under *Approved - ready to print* (Dashboard / Customers), prints it for the therapist, then clicks *Mark as received*.
+
+**Many vouchers at once (batch):**
+- **Admin:** on the Customers page, *Approve all pending (N)* approves every pending request with one confirmation. Customers who no longer have enough spend are skipped.
+- **Staff:** *Print approved vouchers (N)* opens a list with checkboxes. Choose the vouchers, pick a layout (8 per A4 sheet to cut out, or 1 per page), then *Print selected* (one print dialog) and *Mark selected received* (one confirmation).
+- Customers page search also finds a customer by **voucher code**.
+- Print tip: use A4 paper and tick *Background graphics* in the print dialog.
 4. **Admin** gets a notification on the Dashboard (and a badge on Home) that the voucher was received.
 
 ## Transactions
@@ -73,17 +79,17 @@ Before starting: open **Setting** (admin) -> **Reset demo data** so everyone sta
 1. Log in. Show the Dashboard (KPI cards, Sales Overview, Recent Customers, Loyalty Program summary).
 2. **Customer**: search/filter, then Add / Edit a customer.
 3. **Transaction**: pick a customer, service type, service and price, then record it. Only massage counts toward the reward. Try the history filters (search, service type, date range).
-4. **Customer**: on Rosela click **Redeem**, choose the prize -> status becomes *Pending approval*. Log out.
+4. **Customer**: on Rosela (and Maria Santos, Juan Dela Cruz, Ana Villanueva, Liza Garcia, who are also Loyalty Ready) click **Redeem**, choose the prize -> status becomes *Pending approval*. Log out.
 
 **Part 2 - Admin (`admin` / `admin123`)**
-5. Dashboard shows the pending request and a badge on Home. Click **Approve voucher** (or **Reject** to show the decline path). Log out.
+5. Dashboard shows the pending requests and a badge on Home. Click **Approve voucher** on one (or **Reject** to show the decline path), then **Customers -> Approve all pending** for the rest. Log out.
 
 **Part 3 - Staff again**
-6. Dashboard / Customer: **Print voucher**, then **Mark as received**. Log out.
+6. Customer: **Print approved vouchers** -> select all -> **Print selected** (several vouchers in one print job), then **Mark selected received**. (A single voucher can still be printed one by one with **Print voucher**.) Log out.
 
 **Part 4 - Admin again**
 7. Dashboard shows the "voucher received" notification.
-8. **Report**: revenue and customer spending, with Print.
+8. **Report**: revenue and customer spending, with Print and **Export transactions (CSV)**.
 9. **Setting**: loyalty rules, prize list, password, demo-data reset.
 
 ## Data and limitations

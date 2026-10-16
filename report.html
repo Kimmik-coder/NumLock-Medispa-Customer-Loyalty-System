@@ -35,32 +35,91 @@
     .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
     .table-wrap table { min-width: 480px; }
   }
-  @page { size: A4 portrait; margin: 0; }
-  @media print {
-    body { background: #fff; }
-    .sidebar, .topbar, #filter-card, #print-card { display: none !important; }
-    .app { display: block; }
-    .main { padding: 14mm 14mm 12mm; }
-    .print-title { display: block; margin: 0; }
-    .print-head { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #238f8b; padding-bottom: 8px; margin-bottom: 14px; }
-    .print-head .ph-store { font-size: 22px; font-weight: 800; color: #238f8b; line-height: 1.1; }
-    .print-head .ph-title { font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #44545b; margin-top: 3px; }
-    .print-head .ph-meta { text-align: right; font-size: 11px; color: #44545b; line-height: 1.6; }
-    .card, .kpi-card { box-shadow: none; break-inside: avoid; page-break-inside: avoid; }
-    .card { margin-bottom: 14px; padding: 14px 16px; border: 1px solid #cfdcdc; }
-    .kpi-row { grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
-    .kpi-card { padding: 12px 14px; border: 1px solid #cfdcdc; }
-    .chart-wrap svg { max-width: 100%; }
-    table { font-size: 12px; }
-    th { background: #eef6f6; color: #1d2d35; border-bottom: 2px solid #b9cfcf; }
-    td, th { padding: 9px 10px; }
-    tbody tr:nth-child(even) td { background: #f7fbfb; }
-    tr { break-inside: avoid; }
-    .print-sign { display: flex !important; gap: 40px; margin-top: 36px; }
+  /* ---------- Top-customers table: short on screen, full list on print ---------- */
+  .table-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-top: 12px; flex-wrap: wrap; }
+  .table-foot .showing { font-size: 12px; color: var(--text-muted, #667); }
+  .rank { width: 44px; color: var(--text-muted, #667); text-align: center; }
+  th.rank { text-align: center; }
+  .total-row, .print-h, .prt, .print-note, .print-doc-title, .print-meta, .print-head, .print-sign { display: none; }
+  @media screen {
+    .table-wrap.collapsed tr.extra { display: none; }
   }
-  .print-head, .print-sign { display: none; }
-  @media print { .print-head { display: flex; } }
+
+  /* ---------- PRINT: formal report layout ---------- */
+  @page {
+    size: A4 portrait;
+    margin: 16mm 14mm 20mm;
+    @bottom-left  { content: "Sales & Loyalty Report"; font: 9px "Segoe UI", Arial, sans-serif; color: #6b7a80; }
+    @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 9px "Segoe UI", Arial, sans-serif; color: #6b7a80; }
+  }
+  @media print {
+    html, body { background: #fff !important; color: #1d2d35; }
+    .sidebar, .topbar, #filter-card, #print-card, .table-foot, .scr, .card-subtitle { display: none !important; }
+    .app { display: block; }
+    .main { padding: 0 !important; margin: 0 !important; width: auto !important; max-width: none !important; }
+    .prt { display: inline; }
+    .print-h, .print-note, .print-doc-title { display: block; }
+
+    /* Letterhead */
+    .print-head { display: flex; align-items: center; justify-content: space-between; border-bottom: 2.5px solid #238f8b; padding-bottom: 8px; margin-bottom: 10px; }
+    .ph-brand { display: flex; align-items: center; gap: 10px; }
+    .ph-brand img { height: 44px; width: auto; }
+    .print-head .ph-store { font-size: 22px; font-weight: 800; color: #238f8b; line-height: 1.1; }
+    .print-head .ph-sub { font-size: 11px; color: #44545b; margin-top: 2px; }
+    .ph-confid { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #6b7a80; }
+    .print-doc-title { text-align: center; font-size: 17px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; margin: 12px 0 10px; color: #1d2d35; }
+    .print-meta { display: grid; grid-template-columns: 1.3fr 1.2fr 1fr; border: 1px solid #9fb3b3; margin-bottom: 14px; }
+    .print-meta > div { padding: 6px 10px; font-size: 11px; border-right: 1px solid #9fb3b3; }
+    .print-meta > div:last-child { border-right: 0; }
+    .print-meta span { display: block; font-size: 9px; text-transform: uppercase; letter-spacing: .08em; color: #6b7a80; margin-bottom: 2px; }
+    .print-meta strong { font-size: 12px; }
+
+    /* Section headings */
+    .print-h, .card h2 { font-size: 13px; font-weight: 800; color: #1d2d35; margin: 0 0 6px; padding-bottom: 3px; border-bottom: 1px solid #9fb3b3; text-transform: uppercase; letter-spacing: .05em; }
+    .card h2 { margin-bottom: 8px; }
+    .panel-head { display: block; margin-bottom: 0; }
+    .panel-head > div { width: 100%; }
+    .print-note { font-size: 10.5px; color: #44545b; line-height: 1.5; margin: 0 0 8px; }
+
+    /* Cards -> plain sections */
+    .card { box-shadow: none !important; border: 0 !important; padding: 0 !important; margin: 0 0 6mm !important; border-radius: 0; background: transparent; }
+    .card.keep { break-inside: avoid; page-break-inside: avoid; }
+
+    /* KPI summary */
+    .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; margin: 0 0 6mm; border: 1px solid #9fb3b3; }
+    .kpi-card { box-shadow: none !important; border: 0 !important; border-right: 1px solid #9fb3b3 !important; border-radius: 0 !important; padding: 8px 10px !important; break-inside: avoid; background: #f4f9f9 !important; }
+    .kpi-card:last-child { border-right: 0 !important; }
+    .kpi-label { font-size: 9.5px !important; text-transform: uppercase; letter-spacing: .06em; color: #44545b; }
+    .kpi-value { font-size: 17px !important; font-weight: 800; margin-top: 3px; }
+    .kpi-sub { font-size: 10px; }
+
+    .chart-wrap { padding: 0; }
+    .chart-wrap svg { max-width: 100%; max-height: 62mm; }
+
+    /* Table */
+    .table-wrap { overflow: visible !important; }
+    table { font-size: 11px; border: 1px solid #9fb3b3; }
+    thead { display: table-header-group; }
+    th { background: #e6f1f1 !important; color: #1d2d35; border: 1px solid #9fb3b3; border-bottom: 2px solid #238f8b; padding: 7px 8px; font-size: 10px; white-space: normal; }
+    td { border: 1px solid #cfdcdc; padding: 4px 8px; }
+    tbody tr:nth-child(even) td { background: #f7fbfb !important; }
+    tr { break-inside: avoid; page-break-inside: avoid; }
+    .badge { border-radius: 3px; padding: 2px 7px; font-size: 10px; }
+    .badge.gold { border: 1px solid #c9a63b; }
+    .badge.member { border: 1px solid #9fd0bf; }
+    tr.extra { display: none !important; }
+
+    /* Signatures */
+    .print-sign { display: flex !important; gap: 40px; margin-top: 10mm; break-inside: avoid; page-break-inside: avoid; }
+    .print-sign .sig { flex: 1; text-align: center; }
+    .print-sign .sig-line { border-top: 1px solid #1d2d35; margin-bottom: 4px; }
+    .print-sign .sig-name { font-size: 12px; font-weight: 700; min-height: 16px; }
+    .print-sign .sig-role { font-size: 10px; color: #44545b; text-transform: uppercase; letter-spacing: .06em; }
+    .print-end { display: block !important; text-align: center; font-size: 10px; color: #6b7a80; margin-top: 6mm; letter-spacing: .1em; }
+  }
+  .print-end { display: none; }
 </style>
+  <link rel="icon" type="image/png" href="assets/medispa-logo.png">
 </head>
 <body>
   <div class="app">
@@ -69,14 +128,20 @@
       <div class="topbar" id="topbar-slot"></div>
 
       <div class="print-head">
-        <div>
-          <div class="ph-store" id="ph-store">MediSpa</div>
-          <div class="ph-title">Sales &amp; Loyalty Report</div>
+        <div class="ph-brand">
+          <img src="assets/medispa-logo.png" alt="">
+          <div>
+            <div class="ph-store" id="ph-store">MediSpa</div>
+            <div class="ph-sub">Customer Loyalty System</div>
+          </div>
         </div>
-        <div class="ph-meta">
-          <div>Period: <strong id="ph-range">All time</strong></div>
-          <div>Generated: <span id="ph-generated"></span></div>
-        </div>
+        <div class="ph-confid">Official Report</div>
+      </div>
+      <div class="print-doc-title">Sales &amp; Loyalty Report</div>
+      <div class="print-meta">
+        <div><span>Reporting period</span><strong id="ph-range">All time</strong></div>
+        <div><span>Date generated</span><strong id="ph-generated"></strong></div>
+        <div><span>Prepared by</span><strong id="ph-by">-</strong></div>
       </div>
 
       <div class="card" id="filter-card">
@@ -94,10 +159,11 @@
         </div>
       </div>
 
+      <div class="print-h">1. Summary</div>
       <div class="kpi-row">
         <div class="kpi-card">
           <div class="kpi-label">Total revenue</div>
-          <div class="kpi-value" id="r-revenue">\u20B10.00</div>
+          <div class="kpi-value" id="r-revenue">&#8369;0.00</div>
           <div class="kpi-sub" id="r-range">All time</div>
         </div>
         <div class="kpi-card">
@@ -106,7 +172,7 @@
         </div>
         <div class="kpi-card">
           <div class="kpi-label">Avg. transaction</div>
-          <div class="kpi-value" id="r-avg">\u20B10.00</div>
+          <div class="kpi-value" id="r-avg">&#8369;0.00</div>
         </div>
         <div class="kpi-card">
           <div class="kpi-label">Rewards redeemed</div>
@@ -114,27 +180,37 @@
         </div>
       </div>
 
-      <div class="card">
-        <div class="panel-head"><div><h2 style="margin-bottom:4px;">Revenue by day</h2><div class="card-subtitle" style="margin:0;">Daily totals for the selected range.</div></div></div>
+      <div class="card keep">
+        <div class="panel-head"><div><h2 style="margin-bottom:4px;"><span class="prt">2. </span>Revenue by day</h2><div class="card-subtitle" style="margin:0;">Daily totals for the selected range.</div></div></div>
         <div class="chart-wrap" id="chart-wrap"></div>
       </div>
 
       <div class="card">
-        <div class="panel-head"><div><h2 style="margin-bottom:4px;">Top customers by massage spend</h2><div class="card-subtitle" style="margin:0;">A quick summary for monitoring customer spending and loyalty activity. All-time total spent includes spend carried over before the system was used.</div></div></div>
-        <div class="table-wrap"><table>
-          <thead><tr><th>Name</th><th class="num">Massage spend (toward next reward)</th><th class="num">Total spent</th><th>Status</th></tr></thead>
+        <div class="panel-head"><div>
+          <h2 style="margin-bottom:4px;"><span class="scr">Top customers by massage spend</span><span class="prt">3. Top Customers by Massage Spend</span></h2>
+          <div class="card-subtitle" style="margin:0;">A quick summary for monitoring customer spending and loyalty activity. All-time total spent includes spend carried over before the system was used.</div>
+        </div></div>
+        <p class="print-note" id="print-note"></p>
+        <div class="table-wrap collapsed" id="r-wrap"><table>
+          <thead><tr><th class="rank">#</th><th>Name</th><th class="num">Massage spend (toward next reward)</th><th class="num">Total spent</th><th>Status</th></tr></thead>
           <tbody id="r-rows"></tbody>
         </table></div>
         <div id="r-empty" class="empty-state" style="display:none;">No data yet for this range.</div>
+        <div class="table-foot" id="r-foot">
+          <span class="showing" id="r-showing"></span>
+          <button class="btn" id="r-toggle" type="button">Show all</button>
+        </div>
       </div>
 
       <div class="print-sign">
-        <div style="flex:1;border-top:1px solid #8a9aa0;padding-top:4px;font-size:11px;color:#44545b;">Prepared by</div>
-        <div style="flex:1;border-top:1px solid #8a9aa0;padding-top:4px;font-size:11px;color:#44545b;">Approved by (Admin)</div>
+        <div class="sig"><div class="sig-line"></div><div class="sig-name" id="ph-by-sign">&nbsp;</div><div class="sig-role">Prepared by</div></div>
+        <div class="sig"><div class="sig-line"></div><div class="sig-name">&nbsp;</div><div class="sig-role">Approved by (Admin)</div></div>
       </div>
+      <div class="print-end">&mdash; End of report &mdash;</div>
 
       <div class="card" id="print-card">
         <button class="btn solid" id="print-report" type="button">Print this report</button>
+        <button class="btn" id="export-csv" type="button">Export transactions (CSV)</button>
       </div>
     </div>
   </div>
@@ -179,6 +255,11 @@
       return c.name || '-';
     }
 
+    const TOP_N = 10;
+    let showAll = false;
+    const session = (typeof getSession === 'function' && getSession()) || {};
+    const preparedBy = session.username ? session.username.charAt(0).toUpperCase() + session.username.slice(1) : '-';
+
     const fromEl = document.getElementById('f-from');
     const toEl = document.getElementById('f-to');
 
@@ -205,6 +286,8 @@
         (from || to) ? `${from ? formatDate(from) : 'Start'} \u2013 ${to ? formatDate(to) : 'Today'}` : 'All time';
       document.getElementById('ph-range').textContent = document.getElementById('r-range').textContent;
       document.getElementById('ph-store').textContent = settings.storeName || 'MediSpa';
+      document.getElementById('ph-by').textContent = preparedBy;
+      document.getElementById('ph-by-sign').textContent = preparedBy;
       document.getElementById('ph-generated').textContent = new Date().toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' });
 
       // Points and spend per customer, scoped to the filtered range
@@ -225,17 +308,43 @@
 
       const rowsToShow = (from || to) ? ranked.filter(r => r.spend > 0) : ranked;
       const carriedOver = c => (from || to) ? 0 : (Number.isFinite(c.startingPoints) ? c.startingPoints : 0);
-      rowsEl.innerHTML = rowsToShow.map(({ c, spend }) => {
+      rowsEl.innerHTML = rowsToShow.map(({ c, spend }, i) => {
         const pts = c.points || 0;
         const ready = pts >= settings.redeemThreshold;
         return `
-        <tr>
+        <tr class="${i >= TOP_N ? 'extra' : ''}">
+          <td class="rank">${i + 1}</td>
           <td>${esc(displayName(c))}</td>
           <td class="num">${peso(pts)}</td>
           <td class="num">${peso(spend + carriedOver(c))}</td>
           <td>${ready ? '<span class="badge gold">Loyalty Ready</span>' : '<span class="badge member">Member</span>'}</td>
         </tr>`;
       }).join('');
+
+      // Totals row (shown on the printed copy only)
+      if (rowsToShow.length) {
+        const sumPts = rowsToShow.reduce((a, { c }) => a + (c.points || 0), 0);
+        const sumSpent = rowsToShow.reduce((a, { c, spend }) => a + spend + carriedOver(c), 0);
+        rowsEl.insertAdjacentHTML('beforeend', `
+        <tr class="total-row">
+          <td></td><td>Total (${rowsToShow.length} customer${rowsToShow.length === 1 ? '' : 's'})</td>
+          <td class="num">${peso(sumPts)}</td><td class="num">${peso(sumSpent)}</td><td></td>
+        </tr>`);
+      }
+
+      // Short list on screen: top 10 + Show all toggle
+      const total = rowsToShow.length;
+      const foot = document.getElementById('r-foot');
+      foot.style.display = total ? '' : 'none';
+      document.getElementById('r-toggle').style.display = total > TOP_N ? '' : 'none';
+      document.getElementById('r-wrap').classList.toggle('collapsed', !showAll);
+      document.getElementById('r-toggle').textContent = showAll ? 'Show top ' + TOP_N : 'Show all (' + total + ')';
+      document.getElementById('print-note').textContent =
+        'Top ' + Math.min(TOP_N, total) + ' of ' + total + ' customer' + (total === 1 ? '' : 's') +
+        ', ranked by massage spend toward the next reward. Total spent includes spend carried over before the system was used. ' +
+        '"Loyalty Ready" means the customer has reached the reward threshold.';
+      document.getElementById('r-showing').textContent =
+        'Showing ' + (showAll ? total : Math.min(TOP_N, total)) + ' of ' + total + ' customer' + (total === 1 ? '' : 's');
 
       renderChart(txns);
     }
@@ -252,11 +361,13 @@
       const days = Object.keys(byDay).sort();
       const max = Math.max(...days.map(d => byDay[d]), 1);
 
-      const W = 700, H = 220, padL = 56, padB = 28, padT = 10, padR = 10;
+      const W = 700, H = 220, padL = 56, padB = 28, padT = 10, padR = 24;
       const plotW = W - padL - padR, plotH = H - padT - padB;
-      const barGap = 10;
       const maxBarW = 56; // cap so bars stay proportionate when there are only a few days
-      const barW = Math.min(maxBarW, Math.max(6, plotW / days.length - barGap));
+      const slot = plotW / days.length;
+      // Gap shrinks when there are many days so every bar fits inside the plot
+      const barGap = Math.min(10, slot * 0.35);
+      const barW = Math.min(maxBarW, Math.max(1.5, slot - barGap));
       // Center the bar group instead of stretching it across the full plot width
       const groupW = days.length * barW + (days.length - 1) * barGap;
       const startX = padL + Math.max(0, (plotW - groupW) / 2);
@@ -302,7 +413,22 @@
     fromEl.addEventListener('change', render);
     toEl.addEventListener('change', render);
 
+    document.getElementById('r-toggle').addEventListener('click', () => { showAll = !showAll; render(); });
+
     document.getElementById('print-report').addEventListener('click', () => window.print());
+    document.getElementById('export-csv').addEventListener('click', () => {
+      const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+      const rows = allTxns.filter(t => inRange(t.date)).sort((a, b) => (a.date < b.date ? -1 : 1));
+      if (!rows.length) { toast('No transactions in this date range.', 'warning'); return; }
+      const lines = [['Date', 'Customer', 'Category', 'Service', 'Amount'].map(q).join(',')]
+        .concat(rows.map(t => [t.date, t.customerName, t.category, t.service || '', Number(t.amount || 0).toFixed(2)].map(q).join(',')));
+      const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'medispa-transactions.csv';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    });
 
     render();
   </script>

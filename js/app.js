@@ -321,6 +321,170 @@ function openVoucherModal(redemptionId, onChange) {
   });
 }
 
+/* ---------- Bulk voucher actions ----------
+   ADMIN: approve every pending request in one go.
+   STAFF: pick several approved vouchers, print them in ONE print job
+   (1 per page, or 8 per A4 sheet to cut out), then mark them received together. */
+function pendingVouchers() {
+  return readDB(DB_KEYS.redemptions, []).filter(r => redemptionStatus(r) === 'pending');
+}
+function approvedVouchers() {
+  return readDB(DB_KEYS.redemptions, []).filter(r => redemptionStatus(r) === 'approved' && r.code);
+}
+
+async function approveAllVouchers() {
+  if (currentRole() !== 'admin') { toast('Only the admin can approve vouchers.', 'warning'); return false; }
+  const pending = pendingVouchers();
+  if (!pending.length) { toast('No pending voucher requests.', 'warning'); return false; }
+  const ok = await confirmDialog(
+    `Approve all ${pending.length} pending voucher request${pending.length > 1 ? 's' : ''}? Each customer's massage spend will be deducted and a code generated. Customers without enough spend are skipped.`,
+    { title: 'Approve all', confirmText: 'Approve all' }
+  );
+  if (!ok) return false;
+  const settings = getSettings();
+  const reds = readDB(DB_KEYS.redemptions, []);
+  const customers = readDB(DB_KEYS.customers, []);
+  const me = (getSession() || {}).username || '';
+  let done = 0, skipped = 0;
+  reds.forEach(r => {
+    if (redemptionStatus(r) !== 'pending') return;
+    const c = customers.find(x => x.id === r.customerId);
+    const cost = r.points || settings.redeemThreshold;
+    if (!c || (c.points || 0) < cost) { skipped++; return; }
+    c.points = (c.points || 0) - cost;
+    r.status = 'approved';
+    r.code = makeVoucherCode();
+    r.approvedBy = me;
+    r.approvedDate = localISODate();
+    done++;
+  });
+  writeDB(DB_KEYS.redemptions, reds);
+  writeDB(DB_KEYS.customers, customers);
+  toast(`${done} voucher${done === 1 ? '' : 's'} approved` + (skipped ? ` · ${skipped} skipped (not enough spend)` : ''),
+        skipped ? 'warning' : undefined);
+  return done > 0;
+}
+
+async function markVouchersReceivedBulk(ids) {
+  if (currentRole() !== 'staff') { toast('Only staff can mark vouchers as received.', 'warning'); return false; }
+  const reds = readDB(DB_KEYS.redemptions, []);
+  const targets = reds.filter(r => ids.includes(r.id) && redemptionStatus(r) === 'approved');
+  if (!targets.length) return false;
+  const ok = await confirmDialog(
+    `Confirm ${targets.length} voucher${targets.length > 1 ? 's were' : ' was'} given to the therapist? The admin will be notified.`,
+    { title: 'Mark as received', confirmText: 'Yes, received' }
+  );
+  if (!ok) return false;
+  const me = (getSession() || {}).username || '';
+  targets.forEach(r => {
+    r.status = 'received'; r.received = true; r.receivedBy = me;
+    r.receivedDate = localISODate(); r.receivedAt = Date.now(); r.adminSeen = false;
+  });
+  writeDB(DB_KEYS.redemptions, reds);
+  toast(`${targets.length} marked as received — admin notified`);
+  return true;
+}
+
+function printVoucherSheet(list, layout) {
+  const old = document.getElementById('bulk-print-sheet');
+  if (old) old.remove();
+  const sheet = document.createElement('div');
+  sheet.id = 'bulk-print-sheet';
+  sheet.className = layout === 'single' ? 'bulk-single' : 'bulk-grid';
+  const prizeDefault = getSettings().prizes[0];
+  list.forEach(r => {
+    const card = document.createElement('div');
+    card.className = 'voucher-card';
+    card.innerHTML = `<img src="assets/medispa-logo.png" alt="MediSpa">
+      <div class="for">Specially for you</div><div class="who"></div>
+      <div class="prize"></div><div class="code"></div><div class="meta"></div>`;
+    card.querySelector('.who').textContent = r.customerName || '-';
+    card.querySelector('.prize').textContent = r.prize || prizeDefault;
+    card.querySelector('.code').textContent = r.code;
+    card.querySelector('.meta').textContent = `Approved ${r.approvedDate || ''} · Give this to the therapist`;
+    sheet.appendChild(card);
+  });
+  document.body.appendChild(sheet);
+  document.body.classList.add('print-bulk');
+  window.addEventListener('afterprint', () => {
+    document.body.classList.remove('print-bulk');
+    sheet.remove();
+  }, { once: true });
+  window.print();
+}
+
+function openBulkVoucherModal(onChange) {
+  if (currentRole() !== 'staff') return;
+  const list = approvedVouchers();
+  if (!list.length) { toast('No approved vouchers waiting to be printed.', 'warning'); return; }
+  let backdrop = document.getElementById('voucher-bulk-modal');
+  if (backdrop) backdrop.remove();
+  backdrop = document.createElement('div');
+  backdrop.id = 'voucher-bulk-modal';
+  backdrop.className = 'modal-backdrop open';
+  backdrop.setAttribute('role', 'dialog');
+  backdrop.setAttribute('aria-modal', 'true');
+  backdrop.innerHTML = `
+    <div class="modal" style="max-width:520px;">
+      <h2 style="margin-top:0;">Print approved vouchers</h2>
+      <p class="card-subtitle" style="margin-top:4px;">Select the vouchers to print in one go. Then give them to the therapists and mark them received.</p>
+      <label style="display:flex;gap:8px;align-items:center;font-weight:600;margin:8px 0;">
+        <input type="checkbox" id="bulk-all" checked> Select all (<span id="bulk-count"></span>)
+      </label>
+      <div id="bulk-list" style="max-height:260px;overflow:auto;border:1px solid #e3e8ec;border-radius:8px;"></div>
+      <label style="display:flex;gap:8px;align-items:center;margin:12px 0 0;">Layout
+        <select class="filter-select" id="bulk-layout">
+          <option value="grid">8 per A4 page (cut out)</option>
+          <option value="single">1 per page</option>
+        </select>
+      </label>
+      <div class="modal-actions">
+        <button class="btn" type="button" data-act="close">Close</button>
+        <button class="btn" type="button" data-act="print">Print selected</button>
+        <button class="btn solid" type="button" data-act="received">Mark selected received</button>
+      </div>
+    </div>`;
+  const box = backdrop.querySelector('#bulk-list');
+  list.forEach(r => {
+    const row = document.createElement('label');
+    row.style.cssText = 'display:flex;gap:10px;align-items:center;padding:8px 10px;border-bottom:1px solid #eef2f4;cursor:pointer;';
+    row.innerHTML = '<input type="checkbox" checked><span style="flex:1"><b class="n"></b><br><small class="p" style="color:#6b7b86"></small></span><code class="c"></code>';
+    row.querySelector('input').value = r.id;
+    row.querySelector('.n').textContent = r.customerName || '-';
+    row.querySelector('.p').textContent = r.prize || getSettings().prizes[0];
+    row.querySelector('.c').textContent = r.code;
+    box.appendChild(row);
+  });
+  document.body.appendChild(backdrop);
+  const boxes = () => [...box.querySelectorAll('input[type=checkbox]')];
+  const selected = () => boxes().filter(b => b.checked).map(b => b.value);
+  const allBox = backdrop.querySelector('#bulk-all');
+  const refresh = () => {
+    const n = selected().length;
+    backdrop.querySelector('#bulk-count').textContent = `${n} of ${list.length}`;
+    allBox.checked = n === list.length;
+  };
+  refresh();
+  allBox.addEventListener('change', () => { boxes().forEach(b => b.checked = allBox.checked); refresh(); });
+  box.addEventListener('change', refresh);
+  const close = () => backdrop.remove();
+  backdrop.addEventListener('click', async (e) => {
+    if (e.target === backdrop) return close();
+    const btn = e.target.closest('button[data-act]');
+    if (!btn) return;
+    const act = btn.getAttribute('data-act');
+    const ids = selected();
+    if (act === 'close') return close();
+    if (!ids.length) { toast('Select at least one voucher.', 'warning'); return; }
+    if (act === 'print') {
+      printVoucherSheet(list.filter(r => ids.includes(r.id)), backdrop.querySelector('#bulk-layout').value);
+    }
+    if (act === 'received') {
+      if (await markVouchersReceivedBulk(ids)) { close(); if (onChange) onChange(); }
+    }
+  });
+}
+
 // Session auto-expires after this many minutes of inactivity.
 const SESSION_TIMEOUT_MINUTES = 30;
 
@@ -357,7 +521,12 @@ function seedIfEmpty() {
       // points = massage spend in pesos (startingPoints = spend carried over before the system)
       { id: cryptoId(), name: 'Reyes, Rosela', phone: '0917-000-0001', email: 'rosela@example.com', startingPoints: 8000, points: 10200, joined: '2026-06-01' },
       { id: cryptoId(), name: 'Carlos, Almira', phone: '0917-000-0002', email: 'almira@example.com', startingPoints: 3000, points: 3900, joined: '2026-06-14' },
-      { id: cryptoId(), name: 'Egera, Kimberly', phone: '0917-000-0003', email: 'kimberly@example.com', startingPoints: 0, points: 0, joined: '2026-07-02' }
+      { id: cryptoId(), name: 'Egera, Kimberly', phone: '0917-000-0003', email: 'kimberly@example.com', startingPoints: 0, points: 0, joined: '2026-07-02' },
+      // Extra Loyalty Ready customers so the bulk approve / print demo has several at once
+      { id: cryptoId(), name: 'Santos, Maria', phone: '0917-000-0004', email: 'maria.santos@example.com', startingPoints: 10500, points: 10500, joined: '2026-06-05' },
+      { id: cryptoId(), name: 'Dela Cruz, Juan', phone: '0917-000-0005', email: 'juan.delacruz@example.com', startingPoints: 11000, points: 11000, joined: '2026-06-09' },
+      { id: cryptoId(), name: 'Villanueva, Ana', phone: '0917-000-0006', email: 'ana.villanueva@example.com', startingPoints: 10000, points: 10000, joined: '2026-06-20' },
+      { id: cryptoId(), name: 'Garcia, Liza', phone: '0917-000-0007', email: 'liza.garcia@example.com', startingPoints: 12000, points: 12000, joined: '2026-07-11' }
     ].concat(buildDemoCustomers()));
   }
   if (!localStorage.getItem(DB_KEYS.transactions)) {

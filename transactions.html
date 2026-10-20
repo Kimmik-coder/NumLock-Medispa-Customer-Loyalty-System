@@ -29,7 +29,7 @@
     .form-grid .btn { width: 100%; }
     .panel-head { flex-direction: column; align-items: flex-start; gap: 8px; }
     .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-    .table-wrap table { min-width: 640px; }
+    .table-wrap table { min-width: 760px; }
   }
 
   /* Pagination */
@@ -98,6 +98,17 @@
             <div class="hint" id="points-preview">Counts ₱0 toward reward</div>
             <div class="err" id="e-amount"></div>
           </div>
+          <div class="field" id="f-therapist">
+            <label for="txn-therapist">Therapist</label>
+            <select id="txn-therapist"></select>
+            <div class="err" id="e-therapist"></div>
+          </div>
+          <div class="field" id="f-hours">
+            <label for="txn-hours">Hours worked</label>
+            <input id="txn-hours" type="number" min="1" step="0.5" value="1" inputmode="decimal">
+            <div class="hint">Minimum 1 hour</div>
+            <div class="err" id="e-hours"></div>
+          </div>
           <div class="field" id="f-date">
             <label for="txn-date">Date</label>
             <input id="txn-date" type="date">
@@ -122,11 +133,15 @@
         <div class="search-row txn-filters">
           <div class="fgroup grow">
             <label for="txn-search">Search</label>
-            <input id="txn-search" type="search" placeholder="Customer or service...">
+            <input id="txn-search" type="search" placeholder="Customer, service or therapist...">
           </div>
           <div class="fgroup">
             <label for="txn-filter-type">Service type</label>
             <select class="filter-select" id="txn-filter-type"></select>
+          </div>
+          <div class="fgroup">
+            <label for="txn-filter-therapist">Therapist</label>
+            <select class="filter-select" id="txn-filter-therapist"></select>
           </div>
           <div class="fgroup">
             <label for="txn-from">From</label>
@@ -136,11 +151,12 @@
             <label for="txn-to">To</label>
             <input type="date" id="txn-to">
           </div>
+          <button class="btn" type="button" id="txn-today">Today</button>
           <button class="btn" type="button" id="txn-30">Last 30 days</button>
           <button class="btn" type="button" id="txn-clear">Clear</button>
         </div>
         <div class="table-wrap"><table>
-          <thead><tr><th>Date</th><th>Customer</th><th>Service</th><th class="num">Amount</th><th class="num">Counts toward reward</th><th></th></tr></thead>
+          <thead><tr><th>Date</th><th>Customer</th><th>Service</th><th>Therapist</th><th class="num">Hours</th><th class="num">Amount</th><th class="num">Counts toward reward</th><th></th></tr></thead>
           <tbody id="txn-rows"></tbody>
         </table></div>
         <div id="txn-empty" class="empty-state" style="display:none;">No transactions yet. Record one above to start earning points.</div>
@@ -203,7 +219,7 @@
       return pointsForPurchase(amount, category, settings);
     }
 
-    const today = () => localISODate();
+    const today = () => businessDate();   // remit day: 11 AM \u2192 3 AM next morning
 
     const loadCustomers = () => readDB(DB_KEYS.customers, []);
     const saveCustomers = list => writeDB(DB_KEYS.customers, list);
@@ -239,6 +255,12 @@
     }
     fillCustomerSelect();
     document.getElementById('txn-date').value = today();
+
+    /* ---------- Therapist dropdown + filter ---------- */
+    const therapistSelect = document.getElementById('txn-therapist');
+    const hoursInput = document.getElementById('txn-hours');
+    therapistSelect.innerHTML = '<option value="">Select therapist</option>' +
+      settings.therapists.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
 
     const serviceSelect = document.getElementById('txn-service');
     const itemSelect = document.getElementById('txn-item');
@@ -297,7 +319,7 @@
       else { f.classList.remove('invalid'); e.textContent = ''; }
       return !msg;
     }
-    function clearErrors() { ['f-cust', 'f-service', 'f-item', 'f-area', 'f-amount', 'f-date'].forEach(id => setError(id, '')); }
+    function clearErrors() { ['f-cust', 'f-service', 'f-item', 'f-area', 'f-amount', 'f-therapist', 'f-hours', 'f-date'].forEach(id => setError(id, '')); }
 
     function updatePreview() {
       const amt = currentAmount();
@@ -345,15 +367,17 @@
       const all = loadTxns();
       const q = document.getElementById('txn-search').value.toLowerCase().trim();
       const type = document.getElementById('txn-filter-type').value;
+      const therapistFilter = document.getElementById('txn-filter-therapist').value;
       const from = document.getElementById('txn-from').value;
       const to = document.getElementById('txn-to').value;
-      const filtering = !!(q || type || from || to);
+      const filtering = !!(q || type || therapistFilter || from || to);
       const list = all.filter(t => {
         const c = custs.find(x => x.id === t.customerId);
         const name = c ? displayName(c) : (t.customerName || 'Deleted customer');
-        const hay = `${name} ${t.service || ''} ${t.category || ''}`.toLowerCase();
+        const hay = `${name} ${t.service || ''} ${t.category || ''} ${t.therapist || ''}`.toLowerCase();
         const d = String(t.date || '');
         return (!q || hay.includes(q)) && (!type || t.category === type) &&
+               (!therapistFilter || (therapistFilter === '__none' ? !t.therapist : t.therapist === therapistFilter)) &&
                (!from || d >= from) && (!to || d <= to);
       }).sort((a, b) => String(b.date).localeCompare(String(a.date)));
       const emptyEl = document.getElementById('txn-empty');
@@ -364,6 +388,7 @@
       document.getElementById('txn-count').textContent = filtering
         ? `${list.length} of ${all.length} transaction${all.length === 1 ? '' : 's'}`
         : `${all.length} transaction${all.length === 1 ? '' : 's'}`;
+
 
       const pageSize = parseInt(document.getElementById('page-size').value, 10) || 10;
       const totalPages = Math.max(1, Math.ceil(list.length / pageSize));
@@ -386,6 +411,8 @@
           <td>${formatDate(t.date)}</td>
           <td>${esc(name)}</td>
           <td>${t.category ? esc(t.category) : '<span style="color:var(--text-muted);">—</span>'}${t.service ? `<div style="font-size:11px;color:var(--text-muted);">${esc(t.service)}${t.area ? ' \u00B7 ' + esc(t.area) + ' sqm' : ''}${t.priceType === 'promo' ? ' \u00B7 Promo' : ''}</div>` : ''}</td>
+          <td>${t.therapist ? esc(t.therapist) : '<span style="color:var(--text-muted);">\u2014</span>'}</td>
+          <td class="num">${t.hours ? esc(fmtHours(t.hours)) : '<span style="color:var(--text-muted);">\u2014</span>'}</td>
           <td class="num">${peso(t.amount)}</td>
           <td class="num">${peso(t.pointsEarned || 0)}</td>
           <td class="row-actions">${delCell}</td>
@@ -416,6 +443,13 @@
         ok = setError('f-amount', 'Choose the price.') && ok;
       }
 
+      const therapist = therapistSelect.value;
+      if (!therapist) ok = setError('f-therapist', 'Choose the therapist.') && ok;
+
+      const hours = parseFloat(hoursInput.value);
+      if (!Number.isFinite(hours) || hours < MIN_THERAPIST_HOURS) ok = setError('f-hours', `Minimum is ${MIN_THERAPIST_HOURS} hour.`) && ok;
+      else if (hours > 24) ok = setError('f-hours', 'Hours cannot be more than 24.') && ok;
+
       const date = document.getElementById('txn-date').value;
       if (!date) ok = setError('f-date', 'Pick a date.') && ok;
       else if (date > today()) ok = setError('f-date', 'Date cannot be in the future.') && ok;
@@ -438,7 +472,10 @@
         priceType: item.perSqm ? 'per-sqm' : amountSelect.value,
         area: item.perSqm ? parseFloat(areaInput.value) : null,
         pointsEarned,
-        date
+        therapist,
+        hours: Math.round(hours * 100) / 100,
+        date,
+        time: date === today() ? localTimeHM() : ''   // time recorded (only when the sale is for the current remit day)
       });
       saveTxns(txns);
 
@@ -452,6 +489,7 @@
       // Clear history filters so the new row is always visible right after recording.
       ['txn-search', 'txn-from', 'txn-to'].forEach(id => { document.getElementById(id).value = ''; });
       document.getElementById('txn-filter-type').value = '';
+      document.getElementById('txn-filter-therapist').value = '';
       currentPage = 1;
       renderTxnTable();
       fillCustomerSelect();
@@ -503,11 +541,27 @@
     const resetAndRender = () => { currentPage = 1; renderTxnTable(); };
     ['txn-search', 'txn-from', 'txn-to'].forEach(id =>
       document.getElementById(id).addEventListener('input', resetAndRender));
+    // Therapist filter: every therapist in Settings + any name already used in old transactions.
+    (function fillTherapistFilter() {
+      const names = new Set(settings.therapists);
+      loadTxns().forEach(t => { if (t.therapist) names.add(t.therapist); });
+      const hasOld = loadTxns().some(t => !t.therapist);
+      document.getElementById('txn-filter-therapist').innerHTML = '<option value="">All therapists</option>' +
+        [...names].sort((a, b) => a.localeCompare(b)).map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('') +
+        (hasOld ? '<option value="__none">No therapist recorded</option>' : '');
+    })();
+    document.getElementById('txn-filter-therapist').addEventListener('change', resetAndRender);
     document.getElementById('txn-filter-type').addEventListener('change', resetAndRender);
     document.getElementById('page-size').addEventListener('change', resetAndRender);
     document.getElementById('txn-clear').addEventListener('click', () => {
       ['txn-search', 'txn-from', 'txn-to'].forEach(id => { document.getElementById(id).value = ''; });
       document.getElementById('txn-filter-type').value = '';
+      document.getElementById('txn-filter-therapist').value = '';
+      resetAndRender();
+    });
+    document.getElementById('txn-today').addEventListener('click', () => {
+      document.getElementById('txn-from').value = today();
+      document.getElementById('txn-to').value = today();
       resetAndRender();
     });
     document.getElementById('txn-30').addEventListener('click', () => {

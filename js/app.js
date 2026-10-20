@@ -16,6 +16,28 @@ function localISODate(d) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
+/* ---------- Business day (remit day) ----------
+   MediSpa is open 11:00 AM to 3:00 AM the next morning, so one remit day
+   runs across midnight. Anything recorded between 12:00 AM and 2:59 AM
+   still belongs to the day that opened at 11 AM (the PREVIOUS calendar date). */
+const SHOP_OPEN_HOUR = 11;
+const SHOP_CLOSE_HOUR = 3;
+function businessDate(d) {
+  d = d ? new Date(d) : new Date();
+  if (d.getHours() < SHOP_CLOSE_HOUR) d.setDate(d.getDate() - 1);
+  return localISODate(d);
+}
+function localTimeHM(d) {
+  d = d || new Date();
+  const p = n => String(n).padStart(2, '0');
+  return `${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function fmtTime12(hm) {
+  if (!hm) return '';
+  const [h, m] = hm.split(':').map(Number);
+  return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+}
+
 const DB_KEYS = {
   users: 'medispa_users',
   customers: 'medispa_customers',
@@ -42,7 +64,8 @@ const DEFAULT_SETTINGS = {
   currency: '\u20B1',
   qualifyingCategory: 'Massage',
   redeemThreshold: 10000,
-  prizes: ['Free 90-minute massage']
+  prizes: ['Free 90-minute massage'],
+  therapists: ['Joy Dela Peña', 'Grace Mendoza', 'Liza Ramos', 'Maricel Bautista', 'Jenny Villanueva', 'Rowena Castillo', 'Cheryl Aquino', 'Analyn Torres', 'Glenda Navarro', 'Marites Domingo', 'Rhea Santiago', 'Jocelyn Pascual', 'Mylene Cruz']
 };
 
 // Always returns a complete, valid settings object (fills in anything missing).
@@ -50,6 +73,7 @@ function getSettings() {
   const raw = readDB(DB_KEYS.settings, {});
   const s = Object.assign({}, DEFAULT_SETTINGS, raw);
   if (!Array.isArray(s.prizes) || !s.prizes.length) s.prizes = DEFAULT_SETTINGS.prizes.slice();
+  if (!Array.isArray(s.therapists) || !s.therapists.length) s.therapists = DEFAULT_SETTINGS.therapists.slice();
   if (!SERVICE_CATEGORIES.includes(s.qualifyingCategory)) s.qualifyingCategory = DEFAULT_SETTINGS.qualifyingCategory;
   if (!(Number(s.redeemThreshold) > 0)) s.redeemThreshold = DEFAULT_SETTINGS.redeemThreshold;
   return s;
@@ -60,6 +84,70 @@ function pointsForPurchase(amount, category, settings) {
   settings = settings || getSettings();
   if (category !== settings.qualifyingCategory) return 0;
   return Math.floor(Number(amount) || 0);
+}
+
+/* ---------- Therapist hours & remittance ----------
+   Every transaction records which therapist did the service (`therapist`)
+   and how many hours it took (`hours`, minimum 1). What a therapist has to
+   remit = the total amount of the transactions they handled. */
+const MIN_THERAPIST_HOURS = 1;
+const NO_THERAPIST = 'No therapist recorded';   // older transactions made before this field existed
+
+function therapistSummary(txns) {
+  const map = {};
+  txns.forEach(t => {
+    const key = t.therapist || NO_THERAPIST;
+    const r = map[key] || (map[key] = { name: key, count: 0, hours: 0, total: 0, items: [] });
+    r.items.push(t);
+    r.count += 1;
+    r.hours += Number(t.hours) || 0;
+    r.total += Number(t.amount) || 0;
+  });
+  return Object.values(map).sort((a, b) =>
+    a.name === NO_THERAPIST ? 1 : b.name === NO_THERAPIST ? -1 : a.name.localeCompare(b.name));
+}
+/* One separate block per therapist. Each block is a collapsed row showing her
+   name, transactions, total hours and total to remit; tap it to open her own
+   list of work. A grand total for everyone sits at the bottom.
+   `fmtPeso` and `esc` come from the page. */
+function therapistBreakdownHTML(txns, fmtPeso, esc, emptyMsg) {
+  const rows = therapistSummary(txns);
+  if (!rows.length) return '<div style="color:var(--text-muted);font-size:13px;">' + esc(emptyMsg || 'No transactions in this view.') + '</div>';
+  const blocks = rows.map(r => {
+    const items = r.items.slice().sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')) || String(a.time || '').localeCompare(String(b.time || '')));
+    const body = items.map(t => `<tr>
+        <td>${esc(t.date || '')}${t.time ? ' <small style="color:var(--text-muted)">' + esc(fmtTime12(t.time)) + '</small>' : ''}</td>
+        <td>${esc(t.customerName || 'Walk-in')}</td>
+        <td>${esc(t.service || t.category || '')}</td>
+        <td class="num">${t.hours ? esc(fmtHours(t.hours)) : '\u2014'}</td>
+        <td class="num">${fmtPeso(t.amount)}</td></tr>`).join('');
+    return `<details class="therapist-card">
+      <summary class="therapist-head">
+        <span class="therapist-name"><span class="chev">\u25B8</span> ${esc(r.name)}</span>
+        <span class="therapist-totals"><span>${r.count} transaction${r.count === 1 ? '' : 's'}</span><span>${esc(fmtHours(r.hours))}</span><span class="remit-amt">${fmtPeso(r.total)}</span></span>
+      </summary>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Date</th><th>Customer</th><th>Service</th><th class="num">Hours</th><th class="num">Amount</th></tr></thead>
+        <tbody>${body}</tbody>
+        <tfoot><tr><td colspan="3">Subtotal \u2014 ${esc(r.name)}</td><td class="num">${esc(fmtHours(r.hours))}</td><td class="num">${fmtPeso(r.total)}</td></tr></tfoot>
+      </table></div>
+    </details>`;
+  }).join('');
+  const sum = rows.reduce((a, r) => ({ count: a.count + r.count, hours: a.hours + r.hours, total: a.total + r.total }), { count: 0, hours: 0, total: 0 });
+  return `<div class="therapist-colhead"><span>Therapist</span><span class="therapist-totals"><span>Transactions</span><span>Hours</span><span>To remit</span></span></div>`
+    + blocks
+    + `<div class="therapist-grand"><span>All therapists</span><span class="therapist-totals"><span>${sum.count} transactions</span><span>${esc(fmtHours(sum.hours))}</span><span>${fmtPeso(sum.total)}</span></span></div>`;
+}
+// Open every therapist block while printing, then restore.
+window.addEventListener('beforeprint', () => {
+  document.querySelectorAll('details.therapist-card').forEach(d => { d._wasOpen = d.open; d.open = true; });
+});
+window.addEventListener('afterprint', () => {
+  document.querySelectorAll('details.therapist-card').forEach(d => { d.open = !!d._wasOpen; });
+});
+function fmtHours(h) {
+  const n = Math.round((Number(h) || 0) * 100) / 100;
+  return n + (n === 1 ? ' hr' : ' hrs');
 }
 
 /* A redemption moves through: pending -> approved -> received.
@@ -532,7 +620,7 @@ function seedIfEmpty() {
   if (!localStorage.getItem(DB_KEYS.transactions)) {
     const custs = readDB(DB_KEYS.customers, []);
     const now = new Date();
-    const mk = (daysAgo, custIdx, amount, category) => {
+    const mk = (daysAgo, custIdx, amount, category, therapist, hours) => {
       const d = new Date(now);
       d.setDate(d.getDate() - daysAgo);
       return {
@@ -542,16 +630,19 @@ function seedIfEmpty() {
         amount: amount,
         category: category,
         pointsEarned: category === 'Massage' ? Math.floor(amount) : 0,
+        therapist: therapist,
+        hours: hours,
         date: localISODate(d)
       };
     };
     writeDB(DB_KEYS.transactions, [
-      mk(20, 0, 1500, 'Massage'),
-      mk(12, 1, 900, 'Massage'),
-      mk(5, 2, 350, 'Nail Treatments'),   // not a massage, so no reward progress
-      mk(2, 0, 700, 'Massage')
+      mk(20, 0, 1500, 'Massage', DEFAULT_SETTINGS.therapists[0], 2),
+      mk(12, 1, 900, 'Massage', DEFAULT_SETTINGS.therapists[1], 1.5),
+      mk(5, 2, 350, 'Nail Treatments', DEFAULT_SETTINGS.therapists[2], 1),   // not a massage, so no reward progress
+      mk(2, 0, 700, 'Massage', DEFAULT_SETTINGS.therapists[0], 1)
     ].concat(buildDemoTransactions()));
   }
+  addTherapistSampleOnce();
 }
 
 /* ---------- demo data (so pagination / filters have something to show) ----------
@@ -577,6 +668,9 @@ function demoDate(daysAgo) {
 }
 function buildDemoData() {
   const rnd = demoRng(2026);
+  const rndT = demoRng(77);                       // separate stream so therapist/hours don't change the other demo data
+  const DEMO_THERAPISTS = DEFAULT_SETTINGS.therapists;
+  const DEMO_HOURS = [1, 1, 1, 1.5, 2];
   const pick = list => list[Math.floor(rnd() * list.length)];
   const customers = DEMO_NAMES.map((n, i) => {
     // 0 - 7,000 carried over; every 6th customer gets +5,000 so a few are close to / past a reward
@@ -617,12 +711,78 @@ function buildDemoData() {
       priceType: priceType,
       area: area,
       pointsEarned: pointsEarned,
+      therapist: DEMO_THERAPISTS[Math.floor(rndT() * DEMO_THERAPISTS.length)],
+      hours: DEMO_HOURS[Math.floor(rndT() * DEMO_HOURS.length)],
       date: demoDate(Math.floor(rnd() * (c._joinedDaysAgo - 1)))
     });
   }
   customers.forEach(c => { delete c._joinedDaysAgo; });
   return { customers: customers, txns: txns };
 }
+
+/* ---------- Therapist sample data ----------
+   Every therapist gets a few services (with time + hours) on each of the last
+   3 remit days, so the Therapist page and its printout have something to show.
+   All services are HOME SERVICE (no walk-ins), so each one is linked to a real customer. */
+const THERAPIST_SAMPLE_FLAG = 'medispa_therapist_sample_v2';
+function buildTherapistSampleTxns(custs) {
+  const rnd = demoRng(4242);
+  const names = DEFAULT_SETTINGS.therapists;
+  custs = (custs || []).filter(c => c && c.id);
+  if (!custs.length) return [];
+  const cats = ['Massage', 'Massage', 'Massage', 'Massage', 'Nail Treatments', 'Body & Facial', 'Physical Therapy'];
+  const times = ['11:30', '12:45', '14:00', '15:30', '17:00', '18:30', '20:00', '21:15', '22:30', '23:45', '00:40', '01:30'];
+  const out = [];
+  let n = 0;
+  [0, 1, 2].forEach(daysAgo => {
+    const bizDate = demoDate(daysAgo);
+    names.forEach((th, ti) => {
+      const jobs = 2 + Math.floor(rnd() * 3);                  // 2 - 4 services per therapist per day
+      for (let k = 0; k < jobs; k++) {
+        const category = cats[Math.floor(rnd() * cats.length)];
+        const list = SERVICE_MENU[category];
+        const item = list[Math.floor(rnd() * list.length)];
+        const priceType = rnd() < 0.7 ? 'promo' : 'reg';
+        const time = times[Math.floor(rnd() * times.length)];
+        const cust = custs[Math.floor(rnd() * custs.length)];
+        // Sales after midnight keep the date of the day that opened at 11 AM (remit day).
+        out.push({
+          id: 'id_thsample' + String(++n).padStart(4, '0'),
+          customerId: cust.id,
+          customerName: cust.name || customerDisplayName(cust),
+          amount: item[priceType],
+          category: category,
+          service: item.name,
+          priceType: priceType,
+          area: null,
+          pointsEarned: category === 'Massage' ? Math.floor(item[priceType]) : 0,
+          therapist: th,
+          hours: category === 'Physical Therapy' ? 1 : [1, 1, 1.5, 2][Math.floor(rnd() * 4)],
+          date: bizDate,
+          time: time,
+          location: 'Home service'
+        });
+        if (category === 'Massage') cust.points = (cust.points || 0) + Math.floor(item[priceType]);
+      }
+    });
+  });
+  return out;
+}
+// Adds the sample once to browsers that already have data (seed only runs on a fresh start).
+// Also replaces the older sample (walk-in version) if it is there.
+function addTherapistSampleOnce() {
+  if (localStorage.getItem(THERAPIST_SAMPLE_FLAG)) return;
+  const have = readDB(DB_KEYS.transactions, null);
+  const custs = readDB(DB_KEYS.customers, []);
+  if (have) {
+    const kept = have.filter(t => !String(t.id || '').startsWith('id_thsample'));
+    const sample = buildTherapistSampleTxns(custs);
+    writeDB(DB_KEYS.transactions, kept.concat(sample));
+    writeDB(DB_KEYS.customers, custs);
+  }
+  localStorage.setItem(THERAPIST_SAMPLE_FLAG, '1');
+}
+
 function buildDemoCustomers() { return buildDemoData().customers; }
 function buildDemoTransactions() { return buildDemoData().txns; }
 
@@ -803,6 +963,7 @@ const NAV_ITEMS = [
   { href: 'dashboard.html', icon: 'assets/icons/home.png', label: 'Home' },
   { href: 'customers.html', icon: 'assets/icons/customers.png', label: 'Customer' },
   { href: 'transactions.html', icon: 'assets/icons/transactions.png', label: 'Transaction' },
+  { href: 'therapists.html', icon: 'assets/icons/admin.png', label: 'Therapist' },
   { href: 'report.html', icon: 'assets/icons/report.png', label: 'Report', roles: ['admin'] },
   { href: 'settings.html', icon: 'assets/icons/settings.png', label: 'Setting', roles: ['admin'] }
 ];

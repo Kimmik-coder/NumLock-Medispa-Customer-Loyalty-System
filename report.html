@@ -118,6 +118,8 @@
     .print-end { display: block !important; text-align: center; font-size: 10px; color: #6b7a80; margin-top: 6mm; letter-spacing: .1em; }
   }
   .print-end { display: none; }
+  #t-foot td { font-weight: 800; border-top: 2px solid var(--accent-teal, #238f8b); }
+  .t-amt { font-weight: 700; }
 </style>
   <link rel="icon" type="image/png" href="assets/medispa-logo.png">
 </head>
@@ -187,7 +189,16 @@
 
       <div class="card">
         <div class="panel-head"><div>
-          <h2 style="margin-bottom:4px;"><span class="scr">Top customers by massage spend</span><span class="prt">3. Top Customers by Massage Spend</span></h2>
+          <h2 style="margin-bottom:4px;"><span class="prt">3. </span>Therapist hours &amp; remittance</h2>
+          <div class="card-subtitle" style="margin:0;">Hours worked and the total sales each therapist has to remit for the selected range. Tap a therapist to see her list.</div>
+        </div></div>
+        <p class="print-note">Total to remit is the sum of all transaction amounts handled by the therapist in this period.</p>
+        <div id="t-cards"></div>
+      </div>
+
+      <div class="card">
+        <div class="panel-head"><div>
+          <h2 style="margin-bottom:4px;"><span class="scr">Top customers by massage spend</span><span class="prt">4. Top Customers by Massage Spend</span></h2>
           <div class="card-subtitle" style="margin:0;">A quick summary for monitoring customer spending and loyalty activity. All-time total spent includes spend carried over before the system was used.</div>
         </div></div>
         <p class="print-note" id="print-note"></p>
@@ -241,7 +252,7 @@
       const d = new Date(iso);
       return isNaN(d) ? iso : d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
     }
-    const isoToday = () => localISODate();
+    const isoToday = () => businessDate();
 
     const customers = readDB(DB_KEYS.customers, []);
     const allTxns = readDB(DB_KEYS.transactions, []);
@@ -346,7 +357,13 @@
       document.getElementById('r-showing').textContent =
         'Showing ' + (showAll ? total : Math.min(TOP_N, total)) + ' of ' + total + ' customer' + (total === 1 ? '' : 's');
 
+      renderTherapists(txns);
       renderChart(txns);
+    }
+
+    function renderTherapists(txns) {
+      document.getElementById('t-cards').innerHTML =
+        therapistBreakdownHTML(txns, peso, esc, 'No transactions in this range yet.');
     }
 
     function renderChart(txns) {
@@ -420,8 +437,8 @@
       const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
       const rows = allTxns.filter(t => inRange(t.date)).sort((a, b) => (a.date < b.date ? -1 : 1));
       if (!rows.length) { toast('No transactions in this date range.', 'warning'); return; }
-      const lines = [['Date', 'Customer', 'Category', 'Service', 'Amount'].map(q).join(',')]
-        .concat(rows.map(t => [t.date, t.customerName, t.category, t.service || '', Number(t.amount || 0).toFixed(2)].map(q).join(',')));
+      const lines = [['Date', 'Customer', 'Category', 'Service', 'Therapist', 'Hours', 'Amount'].map(q).join(',')]
+        .concat(rows.map(t => [t.date, t.customerName, t.category, t.service || '', t.therapist || '', t.hours || '', Number(t.amount || 0).toFixed(2)].map(q).join(',')));
       const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);

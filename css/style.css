@@ -319,3 +319,22 @@ td.row-actions .btn { vertical-align:middle; }
   body.print-bulk .voucher-card .code { font-size:11pt; margin:1mm 0; padding:1mm 3mm; letter-spacing:1.5px; }
   body.print-bulk .voucher-card .meta { font-size:7pt; margin-top:1.5mm; }
 }
+
+/* ---------- Per-therapist remittance blocks ---------- */
+.therapist-card { border: 1px solid var(--border); border-radius: 10px; margin: 0 0 8px; background: #fff; overflow: hidden; }
+.therapist-head { display: flex; justify-content: space-between; align-items: center; gap: 6px 16px; flex-wrap: wrap; padding: 10px 14px; cursor: pointer; list-style: none; }
+.therapist-head::-webkit-details-marker { display: none; }
+.therapist-card[open] > .therapist-head { background: #eef7f6; border-bottom: 1px solid var(--border); }
+.therapist-name { font-weight: 700; font-size: 14px; }
+.therapist-name .chev { display: inline-block; width: 14px; color: #238f8b; transition: transform .15s; }
+.therapist-card[open] .chev { transform: rotate(90deg); }
+.therapist-totals { display: flex; gap: 0; font-size: 13px; color: var(--text-muted); }
+.therapist-totals > span { min-width: 110px; text-align: right; }
+.therapist-totals .remit-amt { color: var(--text, #1d2b33); font-weight: 800; min-width: 130px; }
+.therapist-colhead { display: flex; justify-content: space-between; padding: 0 14px 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); }
+.therapist-card table { margin: 0; }
+.therapist-card tfoot td { font-weight: 800; border-top: 2px solid var(--accent-teal, #238f8b); }
+.therapist-grand { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 14px; border-radius: 10px; background: #238f8b; color: #fff; font-weight: 800; font-size: 13px; }
+.therapist-grand .therapist-totals { color: #fff; }
+@media (max-width: 640px) { .therapist-totals > span { min-width: 0; margin-left: 12px; } .therapist-colhead { display: none; } }
+@media print { .therapist-card { page-break-inside: avoid; break-inside: avoid; } .therapist-grand { background: #fff !important; color: #000 !important; border: 2px solid #238f8b; } .therapist-grand .therapist-totals { color: #000; } }

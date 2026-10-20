@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MediSpa - Therapist</title>
+<link rel="stylesheet" href="css/style.css">
+<style>
+  .txn-filters .fgroup { display: flex; flex-direction: column; gap: 4px; }
+  .txn-filters .fgroup label { font-size: 11px; color: var(--text-muted); }
+  .th-note { font-size: 12px; color: var(--text-muted); margin: 0 0 12px; }
+  .th-tools { display: flex; gap: 8px; justify-content: flex-end; margin: 0 0 10px; flex-wrap: wrap; }
+  .th-print-title { display: none; }
+  @media (max-width: 640px) {
+    .txn-filters .fgroup, .txn-filters input[type="date"], .txn-filters .filter-select { width: 100%; }
+    .txn-filters .btn { flex: 1; }
+  }
+  @media print {
+    .sidebar, .topbar, .txn-filters, .th-tools, .th-note { display: none !important; }
+    .app { display: block; }
+    .main { padding: 0 !important; margin: 0 !important; width: auto !important; max-width: none !important; }
+    .th-print-title { display: block; font-weight: 800; font-size: 16px; margin: 0 0 4px; }
+  }
+
+  /* ---------- Printable remittance sheets (one page per therapist) ---------- */
+  .th-print-area { display: none; }
+  @page { size: A4 portrait; margin: 14mm 14mm 16mm; }
+  @media print {
+    html, body { background: #fff !important; color: #1d2d35; }
+    .sidebar, .topbar, .txn-filters, .th-tools, .th-note, #th-cards, .panel-head, .th-print-title { display: none !important; }
+    .card { box-shadow: none !important; border: 0 !important; padding: 0 !important; background: transparent; }
+    .th-print-area { display: block; }
+    .sheet { page-break-after: always; break-after: page; }
+    .sheet:last-child { page-break-after: auto; break-after: auto; }
+    .sh-head { display: flex; align-items: center; justify-content: space-between; border-bottom: 2.5px solid #238f8b; padding-bottom: 8px; margin-bottom: 10px; }
+    .sh-brand { display: flex; align-items: center; gap: 10px; }
+    .sh-brand img { height: 42px; width: auto; }
+    .sh-store { font-size: 21px; font-weight: 800; color: #238f8b; line-height: 1.1; }
+    .sh-sub { font-size: 11px; color: #44545b; }
+    .sh-tag { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #6b7a80; }
+    .sh-title { text-align: center; font-size: 16px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; margin: 10px 0; }
+    .sh-mode { text-align: center; font-size: 11px; color: #44545b; margin: -4px 0 10px; letter-spacing: .06em; text-transform: uppercase; }
+    .sh-meta { display: grid; grid-template-columns: 1.4fr 1.4fr 1fr; border: 1px solid #9fb3b3; margin-bottom: 12px; }
+    .sh-meta > div { padding: 6px 10px; font-size: 11px; border-right: 1px solid #9fb3b3; }
+    .sh-meta > div:last-child { border-right: 0; }
+    .sh-meta span { display: block; font-size: 9px; text-transform: uppercase; letter-spacing: .08em; color: #6b7a80; margin-bottom: 2px; }
+    .sh-meta strong { font-size: 12px; }
+    .sheet table { width: 100%; border-collapse: collapse; font-size: 11px; border: 1px solid #9fb3b3; }
+    .sheet thead { display: table-header-group; }
+    .sheet th { background: #e6f1f1 !important; border: 1px solid #9fb3b3; border-bottom: 2px solid #238f8b; padding: 6px 8px; font-size: 10px; text-align: left; }
+    .sheet td { border: 1px solid #cfdcdc; padding: 4px 8px; }
+    .sheet tr { break-inside: avoid; page-break-inside: avoid; }
+    .sheet tbody tr:nth-child(even) td { background: #f7fbfb !important; }
+    .sheet .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .sheet tfoot td { font-weight: 800; font-size: 12px; background: #e6f1f1 !important; border-top: 2px solid #238f8b; }
+    .sh-total { display: flex; gap: 0; margin: 10px 0 0; border: 2px solid #238f8b; }
+    .sh-total > div { flex: 1; padding: 8px 12px; border-right: 1px solid #9fb3b3; }
+    .sh-total > div:last-child { border-right: 0; }
+    .sh-total span { display: block; font-size: 9px; text-transform: uppercase; letter-spacing: .08em; color: #44545b; }
+    .sh-total strong { font-size: 18px; }
+    .sh-cert { font-size: 10.5px; color: #44545b; line-height: 1.5; margin: 12px 0 0; }
+    .sh-sign { display: flex; gap: 40px; margin-top: 16mm; break-inside: avoid; page-break-inside: avoid; }
+    .sh-sign .sig { flex: 1; text-align: center; }
+    .sh-sign .sig-line { border-top: 1px solid #1d2d35; margin-bottom: 4px; }
+    .sh-sign .sig-name { font-size: 12px; font-weight: 700; min-height: 16px; }
+    .sh-sign .sig-role { font-size: 10px; color: #44545b; text-transform: uppercase; letter-spacing: .06em; }
+    .sh-sign .sig-date { font-size: 10px; color: #44545b; margin-top: 6px; }
+    .sh-foot { text-align: center; font-size: 9px; color: #6b7a80; margin-top: 8mm; letter-spacing: .1em; }
+  }
+</style>
+<link rel="icon" type="image/png" href="assets/medispa-logo.png">
+</head>
+<body>
+  <div class="app">
+    <div class="sidebar" id="sidebar-slot"></div>
+    <div class="main">
+      <div class="topbar" id="topbar-slot"></div>
+
+      <div class="card">
+        <div class="panel-head"><div>
+          <h2 style="margin-bottom:4px;">Therapist remittance</h2>
+          <div class="card-subtitle" style="margin:0;">Hours worked and the total each therapist has to remit. Tap a therapist to see her own list of work.</div>
+        </div></div>
+
+        <div class="search-row txn-filters">
+          <div class="fgroup">
+            <label for="th-therapist">Therapist</label>
+            <select class="filter-select" id="th-therapist"></select>
+          </div>
+          <div class="fgroup">
+            <label for="th-from">From</label>
+            <input type="date" id="th-from">
+          </div>
+          <div class="fgroup">
+            <label for="th-to">To</label>
+            <input type="date" id="th-to">
+          </div>
+          <button class="btn" type="button" id="th-today">Today</button>
+          <button class="btn" type="button" id="th-yesterday">Yesterday</button>
+          <button class="btn" type="button" id="th-30">Last 30 days</button>
+          <button class="btn" type="button" id="th-clear">Clear</button>
+        </div>
+
+        <p class="th-note">Print gives one sheet per therapist (all her work, total hours and total to remit) — signature lang ang kulang. One remit day runs from 11:00 AM to 3:00 AM the next morning, so sales after midnight still count for the day that opened at 11 AM.</p>
+        <div class="th-print-title" id="th-print-title"></div>
+        <div class="th-tools">
+          <button class="btn" type="button" id="th-expand">Expand all</button>
+          <button class="btn" type="button" id="th-collapse">Collapse all</button>
+          <button class="btn solid" type="button" id="th-print">Print remittance sheets</button>
+        </div>
+        <div id="th-cards"></div>
+        <div class="th-print-area" id="th-print-area"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+  <script>
+    const session = requireAuth();
+    renderShell('therapists.html', 'Therapist');
+    const settings = getSettings();
+
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, m => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]
+    ));
+    const peso = n => settings.currency + (Number(n) || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const loadTxns = () => readDB(DB_KEYS.transactions, []);
+    const $ = id => document.getElementById(id);
+
+    // Therapist filter: everyone in Settings + any name already used in transactions.
+    (function fillTherapists() {
+      const names = new Set(settings.therapists);
+      const all = loadTxns();
+      all.forEach(t => { if (t.therapist) names.add(t.therapist); });
+      const hasOld = all.some(t => !t.therapist);
+      $('th-therapist').innerHTML = '<option value="">All therapists</option>' +
+        [...names].sort((a, b) => a.localeCompare(b)).map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('') +
+        (hasOld ? '<option value="__none">No therapist recorded</option>' : '');
+    })();
+
+
+    function buildSheets(list, label) {
+      const rows = therapistSummary(list);
+      if (!rows.length) return '';
+      const store = esc(settings.storeName || 'MediSpa');
+      const generated = new Date().toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' });
+      const preparedBy = esc(session && session.username ? session.username.charAt(0).toUpperCase() + session.username.slice(1) : '');
+      const head = title => `
+        <div class="sh-head">
+          <div class="sh-brand"><img src="assets/medispa-logo.png" alt="">
+            <div><div class="sh-store">${store}</div><div class="sh-sub">Customer Loyalty System</div></div></div>
+          <div class="sh-tag">Official Remittance</div>
+        </div>
+        <div class="sh-title">${title}</div><div class="sh-mode">Home service</div>`;
+      const sheets = rows.map(r => {
+        const items = r.items.slice().sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')) || String(a.time || '').localeCompare(String(b.time || '')));
+        const body = items.map((t, i) => `<tr>
+          <td>${i + 1}</td>
+          <td>${esc(t.date || '')}</td>
+          <td>${t.time ? esc(fmtTime12(t.time)) : '\u2014'}</td>
+          <td>${esc(t.customerName || 'Walk-in')}</td>
+          <td>${esc(t.service || t.category || '')}</td>
+          <td class="num">${t.hours ? esc(fmtHours(t.hours)) : '\u2014'}</td>
+          <td class="num">${peso(t.amount)}</td></tr>`).join('');
+        const nm = r.name === NO_THERAPIST ? '' : esc(r.name);
+        return `<section class="sheet">
+          ${head('Therapist Remittance Sheet')}
+          <div class="sh-meta">
+            <div><span>Therapist</span><strong>${esc(r.name)}</strong></div>
+            <div><span>Period</span><strong>${esc(label)}</strong></div>
+            <div><span>Date generated</span><strong>${esc(generated)}</strong></div>
+          </div>
+          <table>
+            <thead><tr><th>#</th><th>Date</th><th>Time</th><th>Customer</th><th>Service</th><th class="num">Hours</th><th class="num">Amount</th></tr></thead>
+            <tbody>${body}</tbody>
+            <tfoot><tr><td colspan="5">TOTAL \u2014 ${r.count} service${r.count === 1 ? '' : 's'}</td><td class="num">${esc(fmtHours(r.hours))}</td><td class="num">${peso(r.total)}</td></tr></tfoot>
+          </table>
+          <div class="sh-total">
+            <div><span>Services done</span><strong>${r.count}</strong></div>
+            <div><span>Total hours worked</span><strong>${esc(fmtHours(r.hours))}</strong></div>
+            <div><span>Total to remit</span><strong>${peso(r.total)}</strong></div>
+          </div>
+          <p class="sh-cert">I certify that the services, hours and amounts listed above are correct, and that I am remitting the total amount shown.</p>
+          <div class="sh-sign">
+            <div class="sig"><div class="sig-line"></div><div class="sig-name">${nm || '&nbsp;'}</div><div class="sig-role">Therapist \u2014 signature over printed name</div><div class="sig-date">Date: ______________</div></div>
+            <div class="sig"><div class="sig-line"></div><div class="sig-name">&nbsp;</div><div class="sig-role">Received by (Cashier / Admin)</div><div class="sig-date">Date: ______________</div></div>
+          </div>
+          <div class="sh-foot">\u2014 ${store} \u00B7 ${esc(r.name)} \u2014</div>
+        </section>`;
+      });
+      // Summary page of everyone, printed last
+      const sum = rows.reduce((a, r) => ({ count: a.count + r.count, hours: a.hours + r.hours, total: a.total + r.total }), { count: 0, hours: 0, total: 0 });
+      const sumBody = rows.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.name)}</td><td class="num">${r.count}</td><td class="num">${esc(fmtHours(r.hours))}</td><td class="num">${peso(r.total)}</td></tr>`).join('');
+      sheets.push(`<section class="sheet">
+        ${head('Therapist Remittance Summary')}
+        <div class="sh-meta">
+          <div><span>Therapists</span><strong>${rows.length}</strong></div>
+          <div><span>Period</span><strong>${esc(label)}</strong></div>
+          <div><span>Date generated</span><strong>${esc(generated)}</strong></div>
+        </div>
+        <table>
+          <thead><tr><th>#</th><th>Therapist</th><th class="num">Services</th><th class="num">Hours</th><th class="num">Total to remit</th></tr></thead>
+          <tbody>${sumBody}</tbody>
+          <tfoot><tr><td colspan="2">GRAND TOTAL</td><td class="num">${sum.count}</td><td class="num">${esc(fmtHours(sum.hours))}</td><td class="num">${peso(sum.total)}</td></tr></tfoot>
+        </table>
+        <div class="sh-sign">
+          <div class="sig"><div class="sig-line"></div><div class="sig-name">${preparedBy || '&nbsp;'}</div><div class="sig-role">Prepared by</div></div>
+          <div class="sig"><div class="sig-line"></div><div class="sig-name">&nbsp;</div><div class="sig-role">Approved by (Admin)</div></div>
+        </div>
+        <div class="sh-foot">\u2014 End of remittance \u2014</div>
+      </section>`);
+      return sheets.join('');
+    }
+
+    function render() {
+      const th = $('th-therapist').value, from = $('th-from').value, to = $('th-to').value;
+      const list = loadTxns().filter(t => {
+        const d = String(t.date || '');
+        return (!th || (th === '__none' ? !t.therapist : t.therapist === th)) && (!from || d >= from) && (!to || d <= to);
+      });
+      $('th-cards').innerHTML = therapistBreakdownHTML(list, peso, esc, 'No transactions for this period.');
+      const label = from || to ? `${from || '...'} to ${to || '...'}` : 'All dates';
+      $('th-print-title').textContent = 'Therapist remittance \u2014 ' + label;
+      $('th-print-area').innerHTML = buildSheets(list, label);
+    }
+
+    const setRange = (a, b) => { $('th-from').value = a; $('th-to').value = b; render(); };
+    $('th-today').addEventListener('click', () => setRange(businessDate(), businessDate()));
+    $('th-yesterday').addEventListener('click', () => {
+      const d = new Date(businessDate() + 'T12:00:00'); d.setDate(d.getDate() - 1);
+      const iso = localISODate(d); setRange(iso, iso);
+    });
+    $('th-30').addEventListener('click', () => {
+      const to = new Date(businessDate() + 'T12:00:00'), from = new Date(to); from.setDate(from.getDate() - 29);
+      setRange(localISODate(from), localISODate(to));
+    });
+    $('th-clear').addEventListener('click', () => { $('th-therapist').value = ''; setRange('', ''); });
+    ['th-therapist', 'th-from', 'th-to'].forEach(id => $(id).addEventListener('change', render));
+    $('th-expand').addEventListener('click', () => document.querySelectorAll('details.therapist-card').forEach(d => d.open = true));
+    $('th-collapse').addEventListener('click', () => document.querySelectorAll('details.therapist-card').forEach(d => d.open = false));
+    $('th-print').addEventListener('click', () => window.print());
+
+    // Opens on today's remit day.
+    setRange(businessDate(), businessDate());
+  </script>
+</body>
+</html>

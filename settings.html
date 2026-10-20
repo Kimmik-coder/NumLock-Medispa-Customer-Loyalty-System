@@ -90,6 +90,20 @@
       </div>
 
       <div class="card">
+        <h2>Therapists</h2>
+        <div class="card-subtitle">These appear in the therapist dropdown when staff record a transaction. Saved together with the settings above.</div>
+        <div id="therapist-list" style="margin-bottom:12px;"></div>
+        <div class="field" id="f-therapist" style="max-width:420px;">
+          <label for="s-therapist">Add a therapist</label>
+          <div class="pw-row">
+            <input id="s-therapist" placeholder="e.g. Maria Santos">
+            <button class="btn pw-toggle" type="button" id="add-therapist">Add</button>
+          </div>
+          <div class="err" id="e-therapist"></div>
+        </div>
+      </div>
+
+      <div class="card">
         <h2>Change password</h2>
         <div class="card-subtitle">Update the demo account password used for this browser.</div>
         <form id="password-form" class="form-grid" novalidate>
@@ -151,6 +165,7 @@
 
     /* ---------- Settings form ---------- */
     let prizes = [];
+    let therapists = [];
 
     function updatePreview(s) {
       document.getElementById('rule-preview').textContent =
@@ -167,6 +182,14 @@
       updatePreview(collectSettingsDraft());
     }
 
+    function renderTherapists() {
+      document.getElementById('therapist-list').innerHTML = therapists.map((p, i) => `
+        <div class="recent-item" style="margin-bottom:6px;">
+          <span>${escapeHTML(p)}</span>
+          <button class="btn danger" type="button" data-rm="${i}" style="margin-left:auto;" ${therapists.length === 1 ? 'disabled title="Keep at least one therapist"' : ''}>Remove</button>
+        </div>`).join('');
+    }
+
     function loadSettingsIntoForm() {
       const s = getSettings();
       document.getElementById('s-name').value = s.storeName;
@@ -176,7 +199,9 @@
       document.getElementById('s-category').value = s.qualifyingCategory;
       document.getElementById('s-threshold').value = s.redeemThreshold;
       prizes = s.prizes.slice();
+      therapists = s.therapists.slice();
       renderPrizes();
+      renderTherapists();
     }
 
     function collectSettingsDraft() {
@@ -214,6 +239,25 @@
       prizes.splice(Number(btn.getAttribute('data-rm')), 1);
       renderPrizes();
     });
+    document.getElementById('add-therapist').addEventListener('click', function () {
+      const input = document.getElementById('s-therapist');
+      const v = input.value.trim();
+      if (!v) return setError('f-therapist', 'Type a therapist name first.');
+      if (therapists.some(p => p.toLowerCase() === v.toLowerCase())) return setError('f-therapist', 'That therapist is already in the list.');
+      setError('f-therapist', '');
+      therapists.push(v);
+      input.value = '';
+      renderTherapists();
+    });
+    document.getElementById('s-therapist').addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); document.getElementById('add-therapist').click(); }
+    });
+    document.getElementById('therapist-list').addEventListener('click', function (e) {
+      const btn = e.target.closest('button[data-rm]');
+      if (!btn || therapists.length <= 1) return;
+      therapists.splice(Number(btn.getAttribute('data-rm')), 1);
+      renderTherapists();
+    });
     loadSettingsIntoForm();
 
     document.getElementById('settings-form').addEventListener('submit', function (e) {
@@ -231,6 +275,7 @@
       if (!Number.isFinite(threshold) || threshold < 1) ok = setError('f-threshold', 'Must be 1 or more.') && ok;
 
       if (!prizes.length) { toast('Add at least one prize.', 'error'); ok = false; }
+      if (!therapists.length) { toast('Add at least one therapist.', 'error'); ok = false; }
       if (!ok) return;
 
       writeDB(DB_KEYS.settings, {
@@ -239,7 +284,8 @@
         currency,
         qualifyingCategory: document.getElementById('s-category').value,
         redeemThreshold: threshold,
-        prizes: prizes.slice()
+        prizes: prizes.slice(),
+        therapists: therapists.slice()
       });
       updatePreview(collectSettingsDraft());
       toast('Settings saved. Use Recalculate on the Customers page if you changed the qualifying service.');
